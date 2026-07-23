@@ -4,7 +4,7 @@ import {
   buildCreativeContext,
   buildPersonaContext,
 } from "../ai/context.js";
-import { getAnalysisProvider } from "../ai/index.js";
+import { getGenerativeProvider } from "../ai/index.js";
 import { PROMPT_TEMPLATE_VERSION } from "../ai/schema.js";
 import { ProviderError, type CoarseAnalysisResult } from "../ai/types.js";
 import { presignGet } from "../r2.js";
@@ -35,7 +35,7 @@ import type { JobHandler } from "./index.js";
  * traces back to the exact persona and model it was built from.
  */
 export const coarseAnalysis: JobHandler = async (job, ctx) => {
-  const provider = getAnalysisProvider();
+  const provider = getGenerativeProvider();
   if (!provider) {
     // Should not happen — this handler is only registered when a provider is
     // configured. Fail softly without marking the project failed so the job
@@ -203,12 +203,13 @@ export const coarseAnalysis: JobHandler = async (job, ctx) => {
     },
   });
 
-  // Understanding continues with a deep pass over the strongest candidates
-  // (handler arrives in a later phase — stays queued until then).
+  // Understanding is done; hand off to the story engine (Phase 6). A deeper
+  // per-moment analysis pass (deep_analysis) is a future refinement that can
+  // be inserted before this step without changing the story handler.
   await enqueuePipelineJob({
     projectId: job.project_id,
-    jobType: "deep_analysis",
-    idempotencyKey: `deep-analysis:${runId}`,
+    jobType: "story_generation",
+    idempotencyKey: `story-generation:${runId}`,
     payload: { analysis_run_id: runId, proxy_asset_id: proxy.id },
     parentJobId: job.id,
   });

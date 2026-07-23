@@ -9,10 +9,10 @@ Creator is a professional AI-powered web application for turning raw Dead by Day
 - **Application** (`/app`) — protected workspace with real Supabase-backed projects, channel-first creation, and direct-to-R2 gameplay uploads. `/app/settings` manages channels and narrator characters (see `docs/CHANNEL_CHARACTER_MODEL.md`). The end-to-end pipeline experience is visible as a clearly labeled demo under "Product preview".
 - **Storage** — private Cloudflare R2 bucket; browser uploads go directly to R2 via server-signed multipart URLs (`src/lib/storage/`, `src/lib/actions/uploads.ts`).
 - **Job system** — Postgres-based queue (`supabase/applied/004_processing_jobs.sql`); uploads enqueue `source_validation`, the workspace shows semantic pipeline progress.
-- **Video worker** — a standalone Docker service in `worker/` that claims jobs and runs FFprobe/FFmpeg (source validation, media probe, proxy generation) plus the first AI step, Gemini **coarse analysis** (schema-validated gameplay events + candidate moments). Deploys outside Vercel; see `worker/README.md`.
-- **AI analysis (Phase 5)** — `coarse_analysis` sends the analysis proxy to Gemini and records grounded, schema-validated events and candidate moments into `analysis_runs` / `gameplay_events` / `candidate_moments` (migration 007). It runs only when the worker has a `GEMINI_API_KEY`; without one the pipeline pauses at _Understanding gameplay_ instead of failing. The provider boundary lives in `worker/src/ai/`.
-- **Database** — migrations 001–005 applied; 006 (service_role grants) and 007 (analysis foundation) pending. See `supabase/README.md`.
-- **Not built yet** — story, ElevenLabs voice, edit, render, QC: Phases 6–10.
+- **Video worker** — a standalone Docker service in `worker/` that claims jobs and runs FFprobe/FFmpeg (source validation, media probe, proxy generation) plus the AI pipeline: Gemini **coarse analysis**, **story** and **script** generation, and ElevenLabs **voice** narration. Deploys outside Vercel; see `worker/README.md`.
+- **AI pipeline (Phases 5–7)** — `coarse_analysis` records grounded gameplay events + candidate moments (migration 007); `story_generation` picks the narrative angle (migration 008); `script_generation` writes timestamp-aware narration in the character's voice, freezing the resolved character config; `voice_generation` narrates each section with ElevenLabs (migration 009). All output is schema-validated; the Gemini steps run only with a `GEMINI_API_KEY` and the voice step only with an `ELEVENLABS_API_KEY` — without a key the pipeline pauses at the matching stage instead of failing. Provider boundaries live in `worker/src/ai/`.
+- **Database** — migrations 001–005 applied; 006 (service_role grants), 007 (analysis), 008 (story + script), and 009 (narration) pending. See `supabase/README.md`.
+- **Not built yet** — edit, render, QC: Phases 8–10.
 
 ## Structure
 

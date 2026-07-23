@@ -1,10 +1,13 @@
-import { geminiConfigured } from "../env.js";
+import { elevenLabsConfigured, geminiConfigured } from "../env.js";
 import type { ProcessingJob } from "../types.js";
 
 import { coarseAnalysis } from "./coarse-analysis.js";
+import { scriptGeneration } from "./script-generation.js";
 import { sourceValidation } from "./source-validation.js";
+import { storyGeneration } from "./story-generation.js";
 import { mediaProbe } from "./media-probe.js";
 import { proxyGeneration } from "./proxy-generation.js";
+import { voiceGeneration } from "./voice-generation.js";
 
 export type JobContext = {
   heartbeat: (progress: {
@@ -30,7 +33,14 @@ export const handlers: Partial<Record<ProcessingJob["job_type"], JobHandler>> = 
   source_validation: sourceValidation,
   media_probe: mediaProbe,
   proxy_generation: proxyGeneration,
-  ...(geminiConfigured ? { coarse_analysis: coarseAnalysis } : {}),
+  ...(geminiConfigured
+    ? {
+        coarse_analysis: coarseAnalysis,
+        story_generation: storyGeneration,
+        script_generation: scriptGeneration,
+      }
+    : {}),
+  ...(elevenLabsConfigured ? { voice_generation: voiceGeneration } : {}),
 };
 
 export const supportedJobTypes = Object.keys(handlers);

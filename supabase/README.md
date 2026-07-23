@@ -55,6 +55,8 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | `applied/005_grant_authenticated_access.sql`   | **Applied** — executed successfully in the Supabase SQL Editor |
 | `migrations/006_grant_service_role_access.sql` | **Pending** — needed before the video worker can run           |
 | `migrations/007_analysis_foundation.sql`       | **Pending** — Phase 5 analysis data model                      |
+| `migrations/008_story_and_script.sql`          | **Pending** — Phase 6 story + script data model                |
+| `migrations/009_narration_assets.sql`          | **Pending** — Phase 7 narration (voice) data model             |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
@@ -69,6 +71,10 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 `006_grant_service_role_access.sql` grants the `service_role` full access to the public schema (current and future tables), matching Supabase's intended backend-role setup. The video worker connects with the service_role key and does direct table reads/writes; without this it would hit the same missing-default-privilege gap as 005 and fail with "permission denied". **Apply this before deploying the worker.**
 
 `007_analysis_foundation.sql` adds the `analysis_run_status` enum and the `analysis_runs`, `gameplay_events`, `candidate_moments`, and `candidate_moment_events` tables — the data model the AI analysis writes into (Phase 5). Owner-scoped read-only RLS for `authenticated`; writes come from the worker (service_role) or later server RPCs.
+
+`008_story_and_script.sql` adds the `story_status`/`script_status` enums and the `story_versions`, `story_version_moments`, `script_versions`, and `script_sections` tables (Phase 6 story engine), plus `projects.selected_story_version_id` (composite FK, so the selected story must belong to the project). `script_versions.narrator_config` freezes the resolved character config at generation time (second consistency freeze point). Owner-scoped read-only RLS; worker writes via service_role.
+
+`009_narration_assets.sql` adds the `narration_assets` table (Phase 7 voice engine): voice-specific metadata linking a `script_section` to its `narration_audio` asset, with `voice_config`/`generation_metadata` frozen per narration (pinned model id, provider request id). A composite FK ties the audio asset to the same project, and a partial unique index enforces one available narration per section. Owner-scoped read-only RLS; worker writes via service_role.
 
 ## After applying a migration
 

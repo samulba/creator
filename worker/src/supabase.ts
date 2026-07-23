@@ -326,6 +326,306 @@ export async function insertCandidateMomentEvents(
   }
 }
 
+// --- Story + script (Phase 6) --------------------------------------------
+
+export type CandidateMomentRow = {
+  id: string;
+  analysis_run_id: string;
+  moment_type: string;
+  start_ms: number;
+  end_ms: number;
+  confidence: number | null;
+  importance_score: number | null;
+  title: string | null;
+  summary: string | null;
+  selection_reason: string | null;
+};
+
+/** The most recent completed analysis run for a project (summary + metrics). */
+export async function loadLatestAnalysisRun(
+  projectId: string,
+): Promise<{ id: string; summary: string | null; metrics: Record<string, unknown> } | null> {
+  const { data, error } = await supabase
+    .from("analysis_runs")
+    .select("id, summary, metrics")
+    .eq("project_id", projectId)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`load analysis run failed: ${error.message}`);
+  return (
+    (data as { id: string; summary: string | null; metrics: Record<string, unknown> } | null) ??
+    null
+  );
+}
+
+/** Candidate moments for a project (optionally scoped to a run), best first. */
+export async function loadCandidateMoments(
+  projectId: string,
+  analysisRunId?: string | null,
+  limit = 60,
+): Promise<CandidateMomentRow[]> {
+  let query = supabase
+    .from("candidate_moments")
+    .select(
+      "id, analysis_run_id, moment_type, start_ms, end_ms, confidence, importance_score, title, summary, selection_reason",
+    )
+    .eq("project_id", projectId)
+    .neq("inclusion_state", "excluded");
+  if (analysisRunId) query = query.eq("analysis_run_id", analysisRunId);
+  const { data, error } = await query
+    .order("importance_score", { ascending: false, nullsFirst: false })
+    .order("start_ms", { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(`load candidate moments failed: ${error.message}`);
+  return (data as CandidateMomentRow[] | null) ?? [];
+}
+
+/** Next 1-based version number for a per-project versioned table. */
+export async function nextVersionNumber(
+  table: string,
+  projectId: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from(table)
+    .select("version_number")
+    .eq("project_id", projectId)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`next version for ${table} failed: ${error.message}`);
+  const current = (data as { version_number: number } | null)?.version_number ?? 0;
+  return current + 1;
+}
+
+export async function createStoryVersion(
+  row: Record<string, unknown>,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("story_versions")
+    .insert(row)
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(`create story version failed: ${error?.message ?? "no id"}`);
+  }
+  return (data as { id: string }).id;
+}
+
+/** Clear any existing selected story so a fresh one can be marked selected. */
+export async function clearSelectedStories(projectId: string): Promise<void> {
+  const { error } = await supabase
+    .from("story_versions")
+    .update({ is_selected: false })
+    .eq("project_id", projectId)
+    .eq("is_selected", true);
+  if (error) throw new Error(`clear selected stories failed: ${error.message}`);
+}
+
+export async function insertStoryVersionMoments(
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("story_version_moments").insert(rows);
+  if (error) {
+    throw new Error(`insert story version moments failed: ${error.message}`);
+  }
+}
+
+export async function setSelectedStoryVersion(
+  projectId: string,
+  storyVersionId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ selected_story_version_id: storyVersionId })
+    .eq("id", projectId);
+  if (error) throw new Error(`set selected story failed: ${error.message}`);
+}
+
+export async function loadSelectedStory(
+  projectId: string,
+): Promise<{
+  id: string;
+  title: string | null;
+  angle: string | null;
+  summary: string | null;
+  structure: Record<string, unknown>;
+} | null> {
+  const { data, error } = await supabase
+    .from("story_versions")
+    .select("id, title, angle, summary, structure")
+    .eq("project_id", projectId)
+    .eq("is_selected", true)
+    .maybeSingle();
+  if (error) throw new Error(`load selected story failed: ${error.message}`);
+  return (
+    (data as {
+      id: string;
+      title: string | null;
+      angle: string | null;
+      summary: string | null;
+      structure: Record<string, unknown>;
+    } | null) ?? null
+  );
+}
+
+/** Candidate moments referenced by a story version, in narrative order. */
+export async function loadStoryBeats(
+  storyVersionId: string,
+): Promise<
+  Array<{
+    story_role: string;
+    sort_order: number;
+    candidate_moment_id: string;
+    moment: CandidateMomentRow;
+  }>
+> {
+  const { data, error } = await supabase
+    .from("story_version_moments")
+    .select(
+      "story_role, sort_order, candidate_moment_id, candidate_moments!inner(id, analysis_run_id, moment_type, start_ms, end_ms, confidence, importance_score, title, summary, selection_reason)",
+    )
+    .eq("story_version_id", storyVersionId)
+    .order("sort_order", { ascending: true });
+  if (error) throw new Error(`load story beats failed: ${error.message}`);
+  const rows = (data as unknown as Array<{
+    story_role: string;
+    sort_order: number;
+    candidate_moment_id: string;
+    candidate_moments: CandidateMomentRow;
+  }>) ?? [];
+  return rows.map((r) => ({
+    story_role: r.story_role,
+    sort_order: r.sort_order,
+    candidate_moment_id: r.candidate_moment_id,
+    moment: r.candidate_moments,
+  }));
+}
+
+export async function createScriptVersion(
+  row: Record<string, unknown>,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("script_versions")
+    .insert(row)
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(`create script version failed: ${error?.message ?? "no id"}`);
+  }
+  return (data as { id: string }).id;
+}
+
+export async function updateScriptVersion(
+  scriptVersionId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("script_versions")
+    .update(patch)
+    .eq("id", scriptVersionId);
+  if (error) throw new Error(`update script version failed: ${error.message}`);
+}
+
+export async function insertScriptSections(
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("script_sections").insert(rows);
+  if (error) throw new Error(`insert script sections failed: ${error.message}`);
+}
+
+/** The active creative settings row id (for linking a script version). */
+export async function loadActiveCreativeSettingsId(
+  projectId: string,
+): Promise<string | null> {
+  const settings = await loadActiveCreativeSettings(projectId);
+  return settings?.id ?? null;
+}
+
+// --- Voice (Phase 7) ------------------------------------------------------
+
+export type ScriptVersionRow = {
+  id: string;
+  project_id: string;
+  language: string;
+  narrator_config: Record<string, unknown>;
+  generation_metadata: Record<string, unknown>;
+};
+
+export type ScriptSectionRow = {
+  id: string;
+  section_index: number;
+  start_ms: number;
+  end_ms: number;
+  beat_label: string | null;
+  text: string;
+};
+
+function selectScriptVersion(column: string, value: string) {
+  return supabase
+    .from("script_versions")
+    .select("id, project_id, language, narrator_config, generation_metadata")
+    .eq(column, value);
+}
+
+export async function loadScriptVersion(
+  scriptVersionId: string,
+): Promise<ScriptVersionRow | null> {
+  const { data, error } = await selectScriptVersion("id", scriptVersionId)
+    .maybeSingle();
+  if (error) throw new Error(`load script version failed: ${error.message}`);
+  return (data as ScriptVersionRow | null) ?? null;
+}
+
+export async function loadLatestScriptVersion(
+  projectId: string,
+): Promise<ScriptVersionRow | null> {
+  const { data, error } = await selectScriptVersion("project_id", projectId)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`load latest script version failed: ${error.message}`);
+  return (data as ScriptVersionRow | null) ?? null;
+}
+
+export async function loadScriptSections(
+  scriptVersionId: string,
+): Promise<ScriptSectionRow[]> {
+  const { data, error } = await supabase
+    .from("script_sections")
+    .select("id, section_index, start_ms, end_ms, beat_label, text")
+    .eq("script_version_id", scriptVersionId)
+    .eq("status", "active")
+    .order("section_index", { ascending: true });
+  if (error) throw new Error(`load script sections failed: ${error.message}`);
+  return (data as ScriptSectionRow[] | null) ?? [];
+}
+
+/** Section ids that already have available narration (for idempotent re-runs). */
+export async function loadNarratedSectionIds(
+  sectionIds: string[],
+): Promise<Set<string>> {
+  if (sectionIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from("narration_assets")
+    .select("script_section_id")
+    .in("script_section_id", sectionIds)
+    .eq("status", "available");
+  if (error) throw new Error(`load narrated sections failed: ${error.message}`);
+  const rows = (data as { script_section_id: string }[] | null) ?? [];
+  return new Set(rows.map((r) => r.script_section_id));
+}
+
+export async function insertNarrationAsset(
+  row: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase.from("narration_assets").insert(row);
+  if (error) throw new Error(`insert narration asset failed: ${error.message}`);
+}
+
 /** True when the project was cancelled/deleted while a job was running. */
 export async function isProjectActive(projectId: string): Promise<boolean> {
   const { data, error } = await supabase

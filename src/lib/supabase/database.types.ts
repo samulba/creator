@@ -74,6 +74,9 @@ export type GameplayPreservation =
   "preserve_more" | "balanced" | "cut_more_aggressively";
 export type TargetLength = "auto" | "shorter" | "standard" | "longer";
 
+export type StoryStatus = "pending" | "generating" | "generated" | "failed";
+export type ScriptStatus = "pending" | "generating" | "generated" | "failed";
+
 export type Database = {
   public: {
     Tables: {
@@ -120,6 +123,7 @@ export type Database = {
           pipeline_state: ProjectPipelineState;
           channel_id: string | null;
           source_asset_id: string | null;
+          selected_story_version_id: string | null;
           target_language: string;
           failure_code: string | null;
           failure_message: string | null;
@@ -137,6 +141,7 @@ export type Database = {
           pipeline_state?: ProjectPipelineState;
           channel_id?: string | null;
           source_asset_id?: string | null;
+          selected_story_version_id?: string | null;
           target_language?: string;
           failure_code?: string | null;
           failure_message?: string | null;
@@ -154,6 +159,7 @@ export type Database = {
           pipeline_state?: ProjectPipelineState;
           channel_id?: string | null;
           source_asset_id?: string | null;
+          selected_story_version_id?: string | null;
           target_language?: string;
           failure_code?: string | null;
           failure_message?: string | null;
@@ -276,6 +282,126 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["channels"]["Row"]>;
         Relationships: [];
       };
+      story_versions: {
+        Row: {
+          id: string;
+          project_id: string;
+          version_number: number;
+          status: StoryStatus;
+          is_selected: boolean;
+          title: string | null;
+          angle: string | null;
+          summary: string | null;
+          /** App-validated object; narrative structure (hook/setup/…). */
+          structure: Json;
+          generation_metadata: Json;
+          created_by_job_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["story_versions"]["Row"]
+        > & { project_id: string; version_number: number };
+        Update: Partial<Database["public"]["Tables"]["story_versions"]["Row"]>;
+        Relationships: [];
+      };
+      story_version_moments: {
+        Row: {
+          story_version_id: string;
+          candidate_moment_id: string;
+          story_role: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["story_version_moments"]["Row"]
+        > & {
+          story_version_id: string;
+          candidate_moment_id: string;
+          story_role: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["story_version_moments"]["Row"]
+        >;
+        Relationships: [];
+      };
+      script_versions: {
+        Row: {
+          id: string;
+          project_id: string;
+          story_version_id: string | null;
+          creative_settings_id: string | null;
+          version_number: number;
+          status: ScriptStatus;
+          language: string;
+          character_id: string | null;
+          /** Frozen resolved character config (second freeze point). */
+          narrator_config: Json;
+          full_text: string | null;
+          generation_metadata: Json;
+          created_by_job_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["script_versions"]["Row"]
+        > & { project_id: string; version_number: number };
+        Update: Partial<Database["public"]["Tables"]["script_versions"]["Row"]>;
+        Relationships: [];
+      };
+      script_sections: {
+        Row: {
+          id: string;
+          project_id: string;
+          script_version_id: string;
+          section_index: number;
+          start_ms: number;
+          end_ms: number;
+          beat_label: string | null;
+          text: string;
+          status: "active" | "superseded" | "regenerating" | "failed";
+          parent_section_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["script_sections"]["Row"]
+        > & {
+          project_id: string;
+          script_version_id: string;
+          section_index: number;
+          start_ms: number;
+          end_ms: number;
+          text: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["script_sections"]["Row"]>;
+        Relationships: [];
+      };
+      narration_assets: {
+        Row: {
+          id: string;
+          project_id: string;
+          script_section_id: string;
+          asset_id: string | null;
+          status:
+            "pending" | "generating" | "available" | "failed" | "superseded";
+          duration_ms: number | null;
+          voice_provider: string | null;
+          /** Frozen resolved voice config used for this narration. */
+          voice_config: Json;
+          generation_metadata: Json;
+          created_by_job_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["narration_assets"]["Row"]
+        > & { project_id: string; script_section_id: string };
+        Update: Partial<
+          Database["public"]["Tables"]["narration_assets"]["Row"]
+        >;
+        Relationships: [];
+      };
     };
     Views: {
       /** Sanitized owner-scoped job state (migration 004). */
@@ -334,4 +460,14 @@ export type ProjectCreativeSettingsRow =
 export type CharacterRow = Database["public"]["Tables"]["characters"]["Row"];
 export type ChannelRow = Database["public"]["Tables"]["channels"]["Row"];
 export type AssetRow = Database["public"]["Tables"]["assets"]["Row"];
+export type StoryVersionRow =
+  Database["public"]["Tables"]["story_versions"]["Row"];
+export type StoryVersionMomentRow =
+  Database["public"]["Tables"]["story_version_moments"]["Row"];
+export type ScriptVersionRow =
+  Database["public"]["Tables"]["script_versions"]["Row"];
+export type ScriptSectionRow =
+  Database["public"]["Tables"]["script_sections"]["Row"];
+export type NarrationAssetRow =
+  Database["public"]["Tables"]["narration_assets"]["Row"];
 export type UserJobRow = Database["public"]["Views"]["public_user_jobs"]["Row"];

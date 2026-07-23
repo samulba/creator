@@ -66,6 +66,14 @@ export async function uploadFile(
   contentType: string,
 ): Promise<void> {
   const body = await readFile(filePath);
+  await uploadBuffer(objectKey, body, contentType);
+}
+
+export async function uploadBuffer(
+  objectKey: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
   await client.send(
     new PutObjectCommand({
       Bucket: env.r2.bucket,

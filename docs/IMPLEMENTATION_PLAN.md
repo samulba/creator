@@ -273,7 +273,7 @@ Status: 5.1, 5.2, and 5.3 are **done** as the `coarse_analysis` worker job;
 5.4 (deep analysis) is scoped but not implemented. Data model:
 `supabase/migrations/007_analysis_foundation.sql` (analysis_runs,
 gameplay_events, candidate_moments, candidate_moment_events). Provider code:
-`worker/src/ai/` behind an `AnalysisProvider` interface; the job handler is
+`worker/src/ai/` behind a `GenerativeProvider` interface; the job handler is
 `worker/src/jobs/coarse-analysis.ts`.
 
 Honest boundary: the schema validation, persona/prompt assembly, config
@@ -288,11 +288,11 @@ applied before a worker with a key runs.
 
 ## 5.1 AI Provider Abstraction — done
 
-`worker/src/ai/types.ts` defines the `AnalysisProvider` interface;
-`worker/src/ai/index.ts` is a factory returning `null` when no provider is
-configured. Provider-specific code (Gemini) stays behind the boundary in
-`worker/src/ai/gemini.ts`, so another model/vendor can be added without
-touching the handler.
+`worker/src/ai/types.ts` defines the `GenerativeProvider` interface (analysis +
+story + script) and `VoiceProvider` (Phase 7); `worker/src/ai/index.ts` is a
+factory returning `null` when no provider is configured. Provider-specific code
+(Gemini, ElevenLabs) stays behind the boundary, so another model/vendor can be
+added without touching the handlers.
 
 ## 5.2 Gemini Video Analysis — done
 
@@ -315,77 +315,86 @@ carry an importance score and a selection reason and default to the
 
 ## 5.4 Deep Analysis — scoped, not implemented
 
-After a coarse pass the worker enqueues `deep_analysis` (currently unhandled →
-stays queued). It will perform a more detailed pass over the strongest
-candidates and produce structured event data suitable for story generation.
+The mainline now goes coarse analysis → `story_generation` directly. A deeper
+per-moment analysis pass (`deep_analysis`) remains a planned refinement that can
+be inserted before story generation without changing the story handler.
 
 ---
 
 # Phase 6 — Story Engine
 
-## 6.1 Story Director
+Status: 6.1, 6.2, and 6.3 are **done** as the `story_generation` and
+`script_generation` worker jobs. Data model:
+`supabase/migrations/008_story_and_script.sql` (story_versions,
+story_version_moments, script_versions, script_sections;
+`projects.selected_story_version_id`). Handlers:
+`worker/src/jobs/story-generation.ts`, `worker/src/jobs/script-generation.ts`;
+prompts + schemas in `worker/src/ai/context.ts` + `worker/src/ai/story-schema.ts`.
 
-Determine the strongest narrative angle grounded in actual gameplay.
+Honest boundary: the story/script schema validators, prompt assembly,
+forbidden-word enforcement, and catchphrase counting are unit-tested
+(`worker/src/ai/story-schema.test.ts`). The live Gemini text calls require a
+real `GEMINI_API_KEY` and are not end-to-end tested; without the key the worker
+does not claim these jobs and the pipeline pauses at *Understanding gameplay*.
+Migration 008 must be applied first.
 
----
+## 6.1 Story Director — done
 
-## 6.2 Narrative Structure
+`story_generation` reads the grounded candidate moments and asks Gemini to pick
+the single strongest narrative angle and the moments that carry it (referencing
+moment indices, never inventing). Writes a selected `story_versions` row +
+`story_version_moments`, and points `projects.selected_story_version_id` at it.
 
-Create:
+## 6.2 Narrative Structure — done
 
-* hook
-* setup
-* escalation
-* turning points
-* climax
-* payoff
+The story response carries a `structure` object (hook, setup, escalation,
+turning_points, climax, payoff), validated and stored on the story version.
 
----
+## 6.3 Script Generation — done
 
-## 6.3 Script Generation
+`script_generation` turns the selected story + beats into timestamp-aware
+narration in the character's voice, written into `script_versions` +
+`script_sections`. Channel consistency:
 
-Generate timestamp-aware narration.
-
-The script must:
-
-* remain grounded in gameplay
-* avoid redundant narration
-* preserve strong gameplay moments
-* support humor and pacing
-
-Channel consistency requirements:
-
-* prompt assembly consumes the character's `speech_style` as persona constraints; `example_lines` are the primary style anchor
-* `forbidden_words` are enforced; catchphrases follow a frequency budget
-* prompt templates are versioned in code; every generation records `model_id`, `prompt_template_version`, `character_config_hash`, and sampling parameters in `generation_metadata`
-* the resolved character config is frozen into `script_versions.narrator_config`
+* prompt assembly consumes the character's `speech_style`; `example_lines` are the primary style anchor
+* `forbidden_words` are enforced hard (a violation fails the job and retries); catchphrase usage is recorded as a soft budget in `generation_metadata`
+* prompt templates are versioned in code (`script-v1`); every generation records `model_id`, `prompt_template_version`, `character_config_hash`, and catchphrase counts in `generation_metadata`
+* the resolved character config is frozen into `script_versions.narrator_config` (second freeze point)
 
 ---
 
 # Phase 7 — Voice Engine
 
-## 7.1 ElevenLabs Integration
+Status: 7.1 is **done** as the `voice_generation` worker job; 7.2 (voice
+direction) is partially covered — the pinned per-character `voice_settings`
+(stability, similarity, style, speed) are passed through; richer per-line
+direction is deferred. Data model:
+`supabase/migrations/009_narration_assets.sql`. Provider:
+`worker/src/ai/elevenlabs.ts` behind a `VoiceProvider` interface; config
+resolution in `worker/src/ai/voice.ts`; handler
+`worker/src/jobs/voice-generation.ts`.
 
-Add:
+Honest boundary: voice-config resolution (pinned model, never "latest"),
+request-body building, and output-format mapping are unit-tested
+(`worker/src/ai/voice.test.ts`). The live ElevenLabs HTTP call requires a real
+`ELEVENLABS_API_KEY` and is not end-to-end tested. Without the key the worker
+does not claim `voice_generation` and the pipeline pauses at *Generating
+voice*. Migration 009 must be applied first.
 
-* secure API integration
-* narrator voice from the project's character (`voice_key` + `voice_settings`, ElevenLabs model pinned per character — never a "latest" alias)
-* generated audio asset storage
-* metadata (voice config frozen per narration asset; provider request ids stored)
-* error handling (missing/deleted provider voice is a first-class failure code)
+## 7.1 ElevenLabs Integration — done
 
----
+* secure API integration (server-side key, never in a browser bundle)
+* narrator voice from the project's character (`voice_key` + `voice_settings`, model **pinned** per character via `voice_settings.model_id` — never a "latest" alias)
+* generated audio stored as `narration_audio` assets in R2
+* metadata frozen per narration asset (`voice_config`) + provider request id in `generation_metadata`
+* error handling: a missing/deleted provider voice is a first-class non-retryable failure (`VOICE_MISSING`); a narrator without a voice fails with `VOICE_NOT_CONFIGURED`
 
-## 7.2 Voice Direction
+## 7.2 Voice Direction — partial
 
-Support structured narration instructions such as:
-
-* pace
-* emphasis
-* pauses
-* emotional delivery
-
-Only where supported reliably.
+The character's `voice_settings` (stability, similarity_boost, style, speed) are
+resolved, clamped, and applied per request. Finer per-line direction (explicit
+pauses, emphasis, emotional delivery) is deferred to a later iteration where the
+provider supports it reliably.
 
 ---
 

@@ -5,20 +5,28 @@ polls the Postgres job queue (migration 004), claims jobs atomically, and
 processes them with FFprobe/FFmpeg. It has no inbound HTTP surface — it only
 talks to Supabase and Cloudflare R2.
 
-## What it does (Phases 4–5)
+## What it does (Phases 4–7)
 
 | Job | Work | Next |
 | --- | --- | --- |
 | `source_validation` | Confirms the uploaded object exists in R2 and matches the recorded size | → `media_probe` |
 | `media_probe` | FFprobe over a presigned URL → writes duration, resolution, frame rate, codecs onto the source asset | → `proxy_generation` |
-| `proxy_generation` | FFmpeg downscales the source to a 720p analysis proxy, uploads it to R2 as a `proxy_video` asset, advances the project to **understanding_gameplay** | → `coarse_analysis` |
-| `coarse_analysis` | Sends the proxy to Gemini, validates the structured result, and writes `analysis_runs` + `gameplay_events` + `candidate_moments` (migration 007) | → `deep_analysis` (handled from Phase 6) |
+| `proxy_generation` | FFmpeg downscales the source to a 720p analysis proxy, uploads it to R2 as a `proxy_video` asset, advances to **understanding_gameplay** | → `coarse_analysis` |
+| `coarse_analysis` | Sends the proxy to Gemini, validates the structured result, writes `analysis_runs` + `gameplay_events` + `candidate_moments` (migration 007) | → `story_generation` |
+| `story_generation` | Gemini chooses the narrative angle + moments; writes a selected `story_versions` + `story_version_moments` (migration 008), advances to **building_story** | → `script_generation` |
+| `script_generation` | Gemini writes timestamp-aware narration; writes `script_versions` (frozen `narrator_config`) + `script_sections`; enforces `forbidden_words` | → `voice_generation` |
+| `voice_generation` | ElevenLabs narrates each section; stores `narration_audio` assets + `narration_assets` rows (migration 009), advances to **building_edit** | → `edit_planning` (Phase 8) |
 
-`coarse_analysis` runs **only when `GEMINI_API_KEY` is set** (see below). If it
-is not set, the worker does not claim `coarse_analysis` jobs and the pipeline
-pauses at **understanding_gameplay** — the job stays queued rather than
-failing. After a successful pass the project waits on `deep_analysis`, whose
-handler arrives in a later phase; until then that job stays queued (expected).
+`coarse_analysis` / `story_generation` / `script_generation` run **only when
+`GEMINI_API_KEY` is set**; `voice_generation` runs **only when
+`ELEVENLABS_API_KEY` is set** (see below). When a key is absent the worker does
+not claim those jobs and the pipeline pauses (job stays queued) rather than
+failing. After voicing, the project waits on `edit_planning`, whose handler
+arrives in Phase 8; until then that job stays queued (expected).
+
+A deeper per-moment analysis pass (`deep_analysis`) is a planned refinement
+that can be inserted between coarse analysis and story generation later; the
+current mainline goes coarse → story directly.
 
 The worker never downloads multi-GB sources just to read them: FFprobe and
 FFmpeg read the presigned URL directly over HTTP range requests. Only the
@@ -27,13 +35,27 @@ upload (even on failure). Coarse analysis reads the small proxy (not the
 original), uploads it to the Gemini File API, and deletes it from Gemini when
 the pass finishes.
 
-## Gemini analysis (Phase 5)
+## AI pipeline (Phases 5–7)
 
-`coarse_analysis` is the first real AI step. It is built against the Gemini
-**File API** + `generateContent` with a strict `responseSchema`, using the
-global `fetch` in Node 22 (no SDK dependency). The provider boundary lives in
-`src/ai/` so a different model/vendor can be swapped in behind the
-`AnalysisProvider` interface without touching the job handler.
+All AI work sits behind provider interfaces in `src/ai/` (`GenerativeProvider`
+for Gemini analysis/story/script, `VoiceProvider` for ElevenLabs), so a
+different model/vendor can be swapped in without touching the job handlers.
+Everything is built against the documented REST APIs with the global `fetch`
+in Node 22 — no SDK dependencies.
+
+- **coarse_analysis** — Gemini **File API** upload + `generateContent` with a
+  strict `responseSchema`; detects grounded gameplay events + candidate moments.
+- **story_generation** — Gemini text call that picks the narrative angle and
+  the moments that carry it (grounded in the analysis, not the raw video).
+- **script_generation** — Gemini text call that writes timestamp-aware
+  narration in the character's voice. `example_lines` are the primary style
+  anchor; `forbidden_words` are enforced hard (a violation fails the job and
+  retries); catchphrase usage is recorded as a soft budget. The resolved
+  character config is frozen into `script_versions.narrator_config`.
+- **voice_generation** — ElevenLabs TTS per section, with the model **pinned**
+  per character (never a "latest" alias). A missing/deleted provider voice is a
+  first-class, non-retryable failure (`VOICE_MISSING`); a narrator with no voice
+  configured fails clearly with `VOICE_NOT_CONFIGURED`.
 
 **Consistency provenance.** Each run stamps `analysis_runs.model_metadata`
 with the provider id, model id, `prompt_template_version`, the resolved
@@ -47,15 +69,16 @@ on screen and never fabricate events; the creative dials and persona bias
 of the response is re-validated and clamped to the database constraints in
 `src/ai/schema.ts` — provider output is treated as data, never trusted blindly.
 
-**Honest testing boundary.** The schema validation, persona/prompt assembly,
-config hashing, and DB mapping are covered by `npm test`
-(`src/ai/schema.test.ts`, 14 cases). The live Gemini HTTP calls in
-`src/ai/gemini.ts` cannot be exercised without a real, funded `GEMINI_API_KEY`,
-so they are **not** covered by automated tests — the request/response shapes
-are written to Google's documented REST contract, and the first run against a
-real key is the true integration test. Transient failures (429/5xx, timeouts)
-retry with the queue's exponential backoff; malformed or empty responses fail
-the run with a clear code and are recorded on the `analysis_runs` row.
+**Honest testing boundary.** The schema validators, persona/story/script
+prompt assembly, config hashing, forbidden-word enforcement, voice-config
+resolution, and request-body building are all covered by `npm test`
+(`src/ai/*.test.ts`, 29 cases). The live **HTTP calls** to Gemini and
+ElevenLabs cannot be exercised without real, funded keys, so they are **not**
+covered by automated tests — the request/response shapes are written to each
+vendor's documented REST contract, and the first run against real keys is the
+true integration test. Transient failures (429/5xx, timeouts) retry with the
+queue's exponential backoff; malformed, empty, or blocked responses fail with a
+clear code and are recorded on the relevant version/run row.
 
 ## Job lifecycle & safety
 
@@ -81,24 +104,28 @@ All server-side secrets. **Never** expose these in the web app or a browser.
 | `R2_ACCESS_KEY_ID` | yes | R2 API token (Object Read & Write) |
 | `R2_SECRET_ACCESS_KEY` | yes | R2 API token secret |
 | `R2_BUCKET` | yes | e.g. `creator-media` |
-| `GEMINI_API_KEY` | no | Google AI Studio key. **Secret.** Enables `coarse_analysis`; absent → those jobs stay queued. |
-| `GEMINI_MODEL` | no | Video-capable Gemini model (default `gemini-2.5-flash`) |
+| `GEMINI_API_KEY` | no | Google AI Studio key. **Secret.** Enables `coarse_analysis` / `story_generation` / `script_generation`; absent → those jobs stay queued. |
+| `GEMINI_MODEL` | no | Video- and text-capable Gemini model (default `gemini-2.5-flash`) |
+| `ELEVENLABS_API_KEY` | no | ElevenLabs key. **Secret.** Enables `voice_generation`; absent → those jobs stay queued. |
+| `ELEVENLABS_MODEL` | no | Pinned fallback model id, never "latest" (default `eleven_multilingual_v2`) |
+| `ELEVENLABS_OUTPUT_FORMAT` | no | Audio output format (default `mp3_44100_128`) |
 | `WORKER_NAME` | no | Label prefix for this worker (default `creator-worker`) |
 | `WORKER_LEASE_SECONDS` | no | Job lease length (default 300) |
 | `WORKER_POLL_INTERVAL_MS` | no | Idle poll interval (default 4000) |
 | `WORKER_PROXY_HEIGHT` | no | Proxy height in px (default 720) |
 | `GEMINI_FILE_TIMEOUT_MS` | no | Max wait for uploaded footage to become ACTIVE (default 300000) |
 | `GEMINI_REQUEST_TIMEOUT_MS` | no | Per-request timeout for Gemini calls (default 600000) |
+| `ELEVENLABS_REQUEST_TIMEOUT_MS` | no | Per-request timeout for voice calls (default 300000) |
 
-The `SUPABASE_SERVICE_ROLE_KEY` (Phase 4) and `GEMINI_API_KEY` (Phase 5) are
-the server-side secrets this worker introduces. Both are different from the
-publishable/anon key the web app uses, and must live only in the worker's
-environment — never in a browser bundle.
+The `SUPABASE_SERVICE_ROLE_KEY` (Phase 4), `GEMINI_API_KEY` (Phases 5–6), and
+`ELEVENLABS_API_KEY` (Phase 7) are the server-side secrets this worker
+introduces. All are different from the publishable/anon key the web app uses,
+and must live only in the worker's environment — never in a browser bundle.
 
-> **Migration 007 must be applied first.** `coarse_analysis` writes into
-> `analysis_runs`, `gameplay_events`, and `candidate_moments`. Apply
-> `supabase/migrations/007_analysis_foundation.sql` (and `006` for the
-> service_role grants) before starting a worker with a Gemini key.
+> **Migrations must be applied first.** `coarse_analysis` needs migration 007;
+> `story_generation`/`script_generation` need 008; `voice_generation` needs
+> 009. Apply `006` (service_role grants) and `007`–`009` before starting a
+> worker with the AI keys.
 
 ## Run locally
 
@@ -156,9 +183,16 @@ Runtime **Docker** → add the environment variables → create.
 4. In R2, a `proxy.mp4` appears alongside the source under
    `.../assets/<proxy-id>/proxy.mp4`, and the source asset row now has
    `duration_ms`, `width`, `height`, and codec fields populated.
-5. **With `GEMINI_API_KEY` set** (and migration 007 applied): the worker logs
-   `job started` for `coarse_analysis`, and on success an `analysis_runs` row
-   (status `completed`) plus `gameplay_events` and `candidate_moments` rows
-   appear for the project. The project then waits on `deep_analysis` (Phase 6).
-   **Without the key**: `coarse_analysis` stays queued and the project stays on
-   *Understanding gameplay* — expected, not an error.
+5. **With `GEMINI_API_KEY` set** (migrations 007–008 applied): the worker runs
+   `coarse_analysis` (writes `analysis_runs` + `gameplay_events` +
+   `candidate_moments`), then `story_generation` (a selected `story_versions`
+   row + `story_version_moments`, project → *Building story*), then
+   `script_generation` (`script_versions` with frozen `narrator_config` +
+   `script_sections`). **Without the key** the project stays on *Understanding
+   gameplay* — expected, not an error.
+6. **With `ELEVENLABS_API_KEY` set** (migration 009 applied, and the project's
+   character has a `voice_key`): `voice_generation` narrates each section →
+   `narration_audio` assets in R2 + `narration_assets` rows, project →
+   *Building edit*, waiting on `edit_planning` (Phase 8). **Without the key**
+   the project stays on *Generating voice* — expected. A character with no
+   voice fails clearly with `VOICE_NOT_CONFIGURED`.

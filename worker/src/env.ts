@@ -58,7 +58,24 @@ export const env = {
     /** Max wall-clock for a single generateContent call. */
     requestTimeoutMs: optionalInt("GEMINI_REQUEST_TIMEOUT_MS", 10 * 60_000),
   },
+
+  /**
+   * ElevenLabs narration (Phase 7). Optional: without ELEVENLABS_API_KEY the
+   * worker does not claim `voice_generation` jobs, so the pipeline pauses at
+   * "generating_voice". The default model is a PINNED id, never a "latest"
+   * alias — the actual per-character model comes from the character's
+   * voice_settings.model_id when set. Server-side secret; worker only.
+   */
+  elevenlabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY?.trim() || null,
+    defaultModel: process.env.ELEVENLABS_MODEL?.trim() || "eleven_multilingual_v2",
+    outputFormat: process.env.ELEVENLABS_OUTPUT_FORMAT?.trim() || "mp3_44100_128",
+    requestTimeoutMs: optionalInt("ELEVENLABS_REQUEST_TIMEOUT_MS", 5 * 60_000),
+  },
 } as const;
 
 /** True when Gemini analysis is configured and coarse_analysis can run. */
 export const geminiConfigured = env.gemini.apiKey !== null;
+
+/** True when ElevenLabs is configured and voice_generation can run. */
+export const elevenLabsConfigured = env.elevenlabs.apiKey !== null;

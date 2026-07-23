@@ -14,10 +14,16 @@ import { createHash } from "node:crypto";
 import type { CharacterRow, CreativeSettingsRow } from "../types.js";
 
 import { PROMPT_TEMPLATE_VERSION } from "./schema.js";
+import {
+  SCRIPT_PROMPT_VERSION,
+  STORY_PROMPT_VERSION,
+} from "./story-schema.js";
 import type {
   CoarseAnalysisInput,
   CreativeContext,
   PersonaContext,
+  ScriptGenerationInput,
+  StoryGenerationInput,
 } from "./types.js";
 
 function str(value: unknown): string | null {
@@ -84,8 +90,11 @@ export function buildPersonaContext(
     tone: str(style.tone),
     humorLevel: str(style.humor_level),
     energy: str(style.energy),
+    sentenceLength: str(style.sentence_length),
+    vocabularyNotes: str(style.vocabulary_notes),
     catchphrases: strList(style.catchphrases),
     forbiddenWords: strList(style.forbidden_words),
+    exampleLines: strList(style.example_lines, 20),
     configHash: characterConfigHash(character),
   };
 }
@@ -166,4 +175,166 @@ export function buildCoarsePrompt(input: CoarseAnalysisInput): string {
     "- Keep titles and summaries factual and concise; do not write narration.",
     `- Respond ONLY as JSON matching the provided schema (template ${PROMPT_TEMPLATE_VERSION}).`,
   ].join("\n");
+}
+
+function personaBlock(persona: PersonaContext): string {
+  const lines: string[] = [];
+  if (persona.name) lines.push(`- Narrator: ${persona.name}`);
+  if (persona.tone) lines.push(`- Tone: ${persona.tone}`);
+  if (persona.humorLevel) lines.push(`- Humor level: ${persona.humorLevel}`);
+  if (persona.energy) lines.push(`- Energy: ${persona.energy}`);
+  if (persona.sentenceLength)
+    lines.push(`- Sentence length: ${persona.sentenceLength}`);
+  if (persona.vocabularyNotes)
+    lines.push(`- Vocabulary notes: ${persona.vocabularyNotes}`);
+  return lines.length ? lines.join("\n") : "- No specific narrator persona.";
+}
+
+function momentLine(m: {
+  index: number;
+  momentType: string;
+  startMs: number;
+  endMs: number;
+  importance: number | null;
+  title: string | null;
+  summary: string | null;
+}): string {
+  const secs = (ms: number) => (ms / 1000).toFixed(1);
+  const imp = m.importance === null ? "?" : Math.round(m.importance);
+  const label = m.title ?? m.summary ?? m.momentType;
+  return `  [${m.index}] ${secs(m.startMs)}–${secs(m.endMs)}s (imp ${imp}) ${m.momentType}: ${label}`;
+}
+
+/** Story director prompt: choose an angle grounded in the actual moments. */
+export function buildStoryPrompt(input: StoryGenerationInput): string {
+  const { persona, creative } = input;
+  return [
+    "You are the story director for a long-form Dead by Daylight YouTube",
+    "video. From the analysis below, choose the single strongest narrative",
+    "angle that is TRUE to what actually happened — never invent events.",
+    "",
+    `Project: ${input.projectTitle}`,
+    `Language for text you write: ${input.language}`,
+    "",
+    "Match summary (from analysis):",
+    input.analysisSummary ?? "(none)",
+    "",
+    "Creative direction (bias only — do not fabricate):",
+    `- Direction: ${creative.creativeDirection}; pacing: ${creative.pacing};`,
+    `  narration density: ${creative.narrationDensity}; length: ${creative.targetLength}`,
+    "",
+    "Narrator context (affects framing, not facts):",
+    personaBlock(persona),
+    "",
+    "Candidate moments (index in brackets — reference these indices):",
+    ...input.moments.map(momentLine),
+    "",
+    "Produce:",
+    "- title, angle (one sentence), and a 2–4 sentence summary",
+    "- structure: hook, setup, escalation, turning_points (array), climax, payoff",
+    "- selections: which candidate moment indices to use, each with a story_role",
+    "  (hook | setup | escalation | turning_point | climax | payoff | context) and",
+    "  a sort_order (0-based playback order). Only reference indices listed above.",
+    "",
+    `Respond ONLY as JSON matching the provided schema (template ${STORY_PROMPT_VERSION}).`,
+  ].join("\n");
+}
+
+/** Script writer prompt: timestamp-aware narration in the character's voice. */
+export function buildScriptPrompt(input: ScriptGenerationInput): string {
+  const { persona, creative, story } = input;
+
+  const anchorLines = persona.exampleLines.length
+    ? persona.exampleLines.map((l) => `  • ${l}`).join("\n")
+    : "  (none provided — infer a consistent voice from tone/energy above)";
+
+  const forbidden = persona.forbiddenWords.length
+    ? persona.forbiddenWords.join(", ")
+    : "(none)";
+  const catchphrases = persona.catchphrases.length
+    ? persona.catchphrases.join("; ")
+    : "(none)";
+
+  const beatLines = input.beats.map((b) => {
+    const secs = (ms: number) => (ms / 1000).toFixed(1);
+    const label = b.title ?? b.summary ?? b.momentType;
+    return `  #${b.sortOrder} [${b.storyRole}] ${secs(b.startMs)}–${secs(b.endMs)}s — ${label}`;
+  });
+
+  return [
+    "You are the narrator/scriptwriter for a long-form Dead by Daylight video.",
+    "Write timestamp-aware narration that matches the story beats below, in the",
+    "narrator's established voice. Stay grounded in the gameplay — narrate what",
+    "happens; do not invent events, kills, or names.",
+    "",
+    `Project: ${input.projectTitle}`,
+    `Language: ${input.language}`,
+    "",
+    "Story:",
+    `- Title: ${story.title ?? "(untitled)"}`,
+    `- Angle: ${story.angle ?? "(none)"}`,
+    `- Summary: ${story.summary ?? "(none)"}`,
+    "",
+    "Narrator voice:",
+    personaBlock(persona),
+    "Voice anchor — match the rhythm and attitude of these example lines closely:",
+    anchorLines,
+    "",
+    "Hard constraints:",
+    `- FORBIDDEN words/phrases — never use: ${forbidden}`,
+    `- Signature phrases (use at most twice across the whole script): ${catchphrases}`,
+    `- Narration density: ${creative.narrationDensity}; pacing: ${creative.pacing}.`,
+    "  Leave strong gameplay moments room to breathe; avoid narrating every second.",
+    "",
+    "Story beats (write one section per beat, in this order):",
+    ...beatLines,
+    "",
+    "For each section return: section_index (0-based), start_ms and end_ms (integer",
+    "ms, within the footage, roughly aligned to the beat), an optional beat_label,",
+    "and the narration text for that beat.",
+    "",
+    `Respond ONLY as JSON matching the provided schema (template ${SCRIPT_PROMPT_VERSION}).`,
+  ].join("\n");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Case-insensitive search for any forbidden word/phrase in the text. Uses
+ * word boundaries for single words; substring for multi-word phrases.
+ * Returns the distinct forbidden terms that appear.
+ */
+export function findForbiddenViolations(
+  text: string,
+  forbiddenWords: string[],
+): string[] {
+  const hits: string[] = [];
+  for (const raw of forbiddenWords) {
+    const term = raw.trim();
+    if (!term) continue;
+    const pattern = /\s/.test(term)
+      ? escapeRegExp(term)
+      : `\\b${escapeRegExp(term)}\\b`;
+    if (new RegExp(pattern, "i").test(text) && !hits.includes(term)) {
+      hits.push(term);
+    }
+  }
+  return hits;
+}
+
+/** Count how often each catchphrase appears (for a soft frequency budget). */
+export function countCatchphrases(
+  text: string,
+  catchphrases: string[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const raw of catchphrases) {
+    const term = raw.trim();
+    if (!term) continue;
+    const matches = text.match(new RegExp(escapeRegExp(term), "gi"));
+    counts[term] = matches ? matches.length : 0;
+  }
+  return counts;
 }

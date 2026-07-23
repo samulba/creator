@@ -15,14 +15,28 @@
  * test.
  */
 
-import { buildCoarsePrompt } from "./context.js";
+import {
+  buildCoarsePrompt,
+  buildScriptPrompt,
+  buildStoryPrompt,
+} from "./context.js";
 import { GEMINI_RESPONSE_SCHEMA, normalizeCoarseResult } from "./schema.js";
 import {
+  normalizeScriptResult,
+  normalizeStoryResult,
+  SCRIPT_RESPONSE_SCHEMA,
+  STORY_RESPONSE_SCHEMA,
+} from "./story-schema.js";
+import {
   ProviderError,
-  type AnalysisProvider,
   type CoarseAnalysisInput,
   type CoarseAnalysisResult,
+  type GenerativeProvider,
   type ProviderProgress,
+  type ScriptGenerationInput,
+  type ScriptResult,
+  type StoryGenerationInput,
+  type StoryResult,
 } from "./types.js";
 
 const API_BASE = "https://generativelanguage.googleapis.com";
@@ -57,7 +71,7 @@ export type GeminiConfig = {
   requestTimeoutMs: number;
 };
 
-export function createGeminiProvider(config: GeminiConfig): AnalysisProvider {
+export function createGeminiProvider(config: GeminiConfig): GenerativeProvider {
   const key = config.apiKey;
 
   async function fetchProxyBytes(input: CoarseAnalysisInput): Promise<Buffer> {
@@ -197,10 +211,10 @@ export function createGeminiProvider(config: GeminiConfig): AnalysisProvider {
     }
   }
 
-  async function generate(
-    file: GeminiFile,
-    mimeType: string,
-    prompt: string,
+  /** Low-level generateContent call returning parsed JSON. */
+  async function callGenerate(
+    parts: Array<Record<string, unknown>>,
+    schema: unknown,
   ): Promise<unknown> {
     const response = await fetch(
       `${API_BASE}/v1beta/models/${config.model}:generateContent?key=${key}`,
@@ -208,18 +222,10 @@ export function createGeminiProvider(config: GeminiConfig): AnalysisProvider {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { file_data: { mime_type: mimeType, file_uri: file.uri } },
-                { text: prompt },
-              ],
-            },
-          ],
+          contents: [{ role: "user", parts }],
           generationConfig: {
             responseMimeType: "application/json",
-            responseSchema: GEMINI_RESPONSE_SCHEMA,
+            responseSchema: schema,
             temperature: 0.3,
           },
         }),
@@ -234,7 +240,7 @@ export function createGeminiProvider(config: GeminiConfig): AnalysisProvider {
     if (payload.promptFeedback?.blockReason) {
       throw new ProviderError(
         "GENERATE_BLOCKED",
-        "The analysis request was blocked by the model's safety filter.",
+        "The request was blocked by the model's safety filter.",
         { retryable: false, details: { reason: payload.promptFeedback.blockReason } },
       );
     }
@@ -244,18 +250,17 @@ export function createGeminiProvider(config: GeminiConfig): AnalysisProvider {
       .join("")
       .trim();
     if (!text) {
-      throw new ProviderError(
-        "GENERATE_EMPTY",
-        "The model returned no analysis.",
-        { retryable: true, details: { finishReason: candidate?.finishReason } },
-      );
+      throw new ProviderError("GENERATE_EMPTY", "The model returned nothing.", {
+        retryable: true,
+        details: { finishReason: candidate?.finishReason },
+      });
     }
     try {
       return JSON.parse(text);
     } catch {
       throw new ProviderError(
         "GENERATE_UNPARSEABLE",
-        "The model returned malformed analysis JSON.",
+        "The model returned malformed JSON.",
         { retryable: true, details: { finishReason: candidate?.finishReason } },
       );
     }
@@ -283,7 +288,13 @@ export function createGeminiProvider(config: GeminiConfig): AnalysisProvider {
       try {
         file = await waitForActive(uploaded, onProgress);
         onProgress?.("analyzing gameplay");
-        const raw = await generate(file, input.proxyMimeType, prompt);
+        const raw = await callGenerate(
+          [
+            { file_data: { mime_type: input.proxyMimeType, file_uri: file.uri } },
+            { text: prompt },
+          ],
+          GEMINI_RESPONSE_SCHEMA,
+        );
 
         const result = normalizeCoarseResult(raw, {
           durationMs: input.durationMs,
@@ -300,7 +311,49 @@ export function createGeminiProvider(config: GeminiConfig): AnalysisProvider {
         if (file ?? uploaded) await deleteFile(file ?? uploaded);
       }
     },
-  };
+
+    async generateStory(
+      input: StoryGenerationInput,
+      onProgress?: ProviderProgress,
+    ): Promise<StoryResult> {
+      onProgress?.("choosing the narrative angle");
+      const raw = await callGenerate(
+        [{ text: buildStoryPrompt(input) }],
+        STORY_RESPONSE_SCHEMA,
+      );
+      const result = normalizeStoryResult(raw, input.moments.length);
+      if (!result) {
+        throw new ProviderError(
+          "STORY_INVALID",
+          "The story response did not match the expected shape.",
+          { retryable: true },
+        );
+      }
+      return result;
+    },
+
+    async generateScript(
+      input: ScriptGenerationInput,
+      onProgress?: ProviderProgress,
+    ): Promise<ScriptResult> {
+      onProgress?.("writing the narration script");
+      const raw = await callGenerate(
+        [{ text: buildScriptPrompt(input) }],
+        SCRIPT_RESPONSE_SCHEMA,
+      );
+      const result = normalizeScriptResult(raw, {
+        durationMs: input.durationMs,
+      });
+      if (!result) {
+        throw new ProviderError(
+          "SCRIPT_INVALID",
+          "The script response did not match the expected shape.",
+          { retryable: true },
+        );
+      }
+      return result;
+    },
+  } satisfies GenerativeProvider;
 }
 
 function providerErrorFromResponse(code: string, status: number): ProviderError {

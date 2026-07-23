@@ -15,8 +15,12 @@ export type PersonaContext = {
   tone: string | null;
   humorLevel: string | null;
   energy: string | null;
+  sentenceLength: string | null;
+  vocabularyNotes: string | null;
   catchphrases: string[];
   forbiddenWords: string[];
+  /** The primary style anchor for script generation (voice fingerprint). */
+  exampleLines: string[];
   /**
    * Stable hash of the resolved character configuration. Recorded on the
    * analysis run so a video's provenance ties back to an exact persona
@@ -84,14 +88,149 @@ export type CoarseAnalysisResult = {
 /** Progress callback so long provider calls can keep the job lease alive. */
 export type ProviderProgress = (note: string) => void;
 
-/** A concrete analysis backend (e.g. Gemini). */
-export type AnalysisProvider = {
+// --- Story generation (Phase 6) -------------------------------------------
+
+/** A candidate moment handed to the story director (index = position). */
+export type MomentBrief = {
+  index: number;
+  momentType: string;
+  startMs: number;
+  endMs: number;
+  importance: number | null;
+  confidence: number | null;
+  title: string | null;
+  summary: string | null;
+  selectionReason: string | null;
+};
+
+export type StoryGenerationInput = {
+  projectTitle: string;
+  language: string;
+  persona: PersonaContext;
+  creative: CreativeContext;
+  analysisSummary: string | null;
+  matchContext: Record<string, unknown>;
+  moments: MomentBrief[];
+};
+
+/** One selected moment placed into the narrative. */
+export type StorySelection = {
+  momentIndex: number;
+  storyRole: string;
+  sortOrder: number;
+};
+
+export type StoryResult = {
+  title: string | null;
+  angle: string | null;
+  summary: string | null;
+  structure: Record<string, unknown>;
+  selections: StorySelection[];
+};
+
+// --- Script generation (Phase 6) ------------------------------------------
+
+/** An ordered story beat (a selected moment in its narrative role). */
+export type ScriptBeat = {
+  momentIndex: number;
+  storyRole: string;
+  sortOrder: number;
+  momentType: string;
+  startMs: number;
+  endMs: number;
+  title: string | null;
+  summary: string | null;
+};
+
+export type ScriptGenerationInput = {
+  projectTitle: string;
+  language: string;
+  durationMs: number | null;
+  persona: PersonaContext;
+  creative: CreativeContext;
+  story: {
+    title: string | null;
+    angle: string | null;
+    summary: string | null;
+    structure: Record<string, unknown>;
+  };
+  beats: ScriptBeat[];
+};
+
+export type ScriptSectionDraft = {
+  sectionIndex: number;
+  startMs: number;
+  endMs: number;
+  beatLabel: string | null;
+  text: string;
+};
+
+export type ScriptResult = {
+  sections: ScriptSectionDraft[];
+  fullText: string;
+};
+
+// --- Voice generation (Phase 7) -------------------------------------------
+
+/** ElevenLabs voice_settings (only defined keys are sent). */
+export type VoiceSettings = {
+  stability?: number;
+  similarity_boost?: number;
+  style?: number;
+  use_speaker_boost?: boolean;
+  speed?: number;
+};
+
+/** A resolved, frozen voice configuration for one narration. */
+export type ResolvedVoiceConfig = {
+  provider: string;
+  voiceKey: string;
+  /** Pinned model id — never a "latest" alias. */
+  modelId: string;
+  settings: VoiceSettings;
+  outputFormat: string;
+};
+
+export type VoiceSynthesisInput = {
+  voiceKey: string;
+  modelId: string;
+  settings: VoiceSettings;
+  outputFormat: string;
+  text: string;
+};
+
+export type VoiceSynthesisResult = {
+  audio: Buffer;
+  contentType: string;
+  /** Provider request id, when returned — stored for provenance. */
+  requestId: string | null;
+};
+
+/** A concrete text-to-speech backend (e.g. ElevenLabs). */
+export type VoiceProvider = {
+  readonly id: string;
+  synthesize(
+    input: VoiceSynthesisInput,
+    onProgress?: ProviderProgress,
+  ): Promise<VoiceSynthesisResult>;
+};
+
+/** A concrete generative backend (e.g. Gemini) for analysis + text. */
+export type GenerativeProvider = {
   readonly id: string;
   readonly model: string;
   analyzeCoarse(
     input: CoarseAnalysisInput,
     onProgress?: ProviderProgress,
   ): Promise<CoarseAnalysisResult>;
+  generateStory(
+    input: StoryGenerationInput,
+    onProgress?: ProviderProgress,
+  ): Promise<StoryResult>;
+  generateScript(
+    input: ScriptGenerationInput,
+    onProgress?: ProviderProgress,
+  ): Promise<ScriptResult>;
 };
 
 /** Thrown by providers for a controlled, classified failure. */
