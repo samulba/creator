@@ -156,8 +156,11 @@ export async function setProjectArchived(
 }
 
 /**
- * Soft deletion. No storage assets exist yet (pre Phase 2), so the delete
- * request and logical deletion happen in one step.
+ * Soft deletion: marks the project deleted so it disappears from the user's
+ * workspace immediately (RLS hides deleted rows). This does NOT yet remove the
+ * R2 objects (source, proxy, narration, final video) — background storage
+ * cleanup via the `asset_deletion` job is a later phase. For now this is the
+ * user-facing "remove this project" action (e.g. clearing test projects).
  */
 export async function deleteProject(projectId: string): Promise<ActionResult> {
   const context = await requireActionContext();

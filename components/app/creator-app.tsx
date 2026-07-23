@@ -150,6 +150,13 @@ export function CreatorApp({
   const [isCreating, setIsCreating] = useState(false);
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Selecting a project also clears any pending delete confirmation.
+  const selectProject = (id: string) => {
+    setSelectedProjectId(id);
+    setConfirmingDelete(false);
+  };
 
   const settingsByProject = useMemo(() => {
     const map = new Map<string, ProjectCreativeSettingsRow>();
@@ -302,7 +309,7 @@ export function CreatorApp({
             <ProjectsList
               items={projectItems}
               selectedId={selectedProject?.id ?? ""}
-              onSelect={setSelectedProjectId}
+              onSelect={selectProject}
             />
           ) : (
             <p className="px-5 py-6 text-xs leading-5 text-ink-muted">
@@ -356,9 +363,49 @@ export function CreatorApp({
                         pipelineDisplay[selectedProject.pipeline_state].label
                       }
                     />
-                    <span className="text-xs text-ink-muted">
-                      Updated {selectedProject.updated_at.slice(0, 10)}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-ink-muted">
+                        Updated {selectedProject.updated_at.slice(0, 10)}
+                      </span>
+                      {confirmingDelete ? (
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs text-ink-muted">
+                            Delete this project?
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={pending}
+                            onClick={async () => {
+                              await runProjectAction(() =>
+                                deleteProject(selectedProject.id),
+                              );
+                              setConfirmingDelete(false);
+                              setSelectedProjectId(null);
+                            }}
+                          >
+                            Delete
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={pending}
+                            onClick={() => setConfirmingDelete(false)}
+                          >
+                            Cancel
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={pending}
+                          onClick={() => setConfirmingDelete(true)}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <h2 className="mt-3 max-w-3xl text-xl font-semibold tracking-tight text-ink sm:text-2xl">
                     {selectedProject.title}
