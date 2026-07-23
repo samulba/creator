@@ -271,10 +271,10 @@ export function CreatorApp({
       />
 
       {/* Project library */}
-      <section className="flex flex-col border-b border-edge lg:w-80 lg:shrink-0 lg:border-r lg:border-b-0">
+      <section className="flex flex-col border-b border-edge bg-sunken/30 lg:w-80 lg:shrink-0 lg:border-r lg:border-b-0">
         <header className="flex items-center justify-between gap-3 border-b border-edge px-5 py-4">
           <div>
-            <h1 className="text-sm font-semibold text-ink">
+            <h1 className="text-sm font-semibold tracking-tight text-ink">
               {isPreview ? "Product preview" : "Projects"}
             </h1>
             <p className="mt-0.5 text-xs text-ink-muted">
@@ -320,7 +320,7 @@ export function CreatorApp({
       </section>
 
       {/* Workspace */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="dot-grid relative flex min-w-0 flex-1 flex-col">
         {isPreview ? (
           <DemoWorkspace
             selectedDemo={selectedDemo}
@@ -353,7 +353,7 @@ export function CreatorApp({
 
             {selectedProject ? (
               <>
-                <header className="border-b border-edge px-5 pt-5 pb-5 sm:px-8 sm:pt-6">
+                <header className="relative z-10 border-b border-edge bg-canvas px-5 pt-5 pb-5 sm:px-8 sm:pt-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <StatusBadge
                       tone={
@@ -407,7 +407,7 @@ export function CreatorApp({
                       )}
                     </div>
                   </div>
-                  <h2 className="mt-3 max-w-3xl text-xl font-semibold tracking-tight text-ink sm:text-2xl">
+                  <h2 className="mt-3.5 max-w-3xl text-2xl font-semibold tracking-tight text-ink sm:text-[26px]">
                     {selectedProject.title}
                   </h2>
                   <p className="mt-1.5 text-sm text-ink-secondary">

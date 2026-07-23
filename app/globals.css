@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 /*
- * Creator design tokens.
+ * Creator design system.
  *
- * One dark-first visual system shared by the landing page, auth, and the
- * application. Warm near-black neutrals with a single restrained brass
- * accent; status colors are functional and never dominate.
+ * One dark-first, cinematic visual language shared by the landing page, auth,
+ * and the application. Warm near-black neutrals with depth (layered surfaces +
+ * soft shadows) and a single confident brass accent. Status colors are
+ * functional. Modern, calm, premium — no gradients-as-decoration, no glass,
+ * no oversized radii.
  *
- * All surfaces must use these tokens — no per-page hardcoded palettes.
+ * All surfaces use these tokens — no per-page hardcoded palettes.
  */
 @theme {
   --font-sans:
@@ -17,36 +19,52 @@
     ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
     monospace;
 
-  /* Surfaces */
-  --color-canvas: #0b0b09; /* page background */
-  --color-surface: #121210; /* raised panels */
-  --color-raised: #161613; /* subtle secondary surface */
-  --color-overlay: #1a1a17; /* dialogs, menus */
+  /* Surfaces — layered, subtly warm, increasing lightness with elevation. */
+  --color-canvas: #0a0a08; /* page background */
+  --color-sunken: #070706; /* recessed wells */
+  --color-surface: #131311; /* raised panels / cards */
+  --color-raised: #1a1917; /* secondary surface, hover */
+  --color-overlay: #201f1c; /* dialogs, menus, popovers */
 
   /* Borders */
   --color-edge: #262521; /* default hairline */
-  --color-edge-strong: #383630; /* emphasized border */
+  --color-edge-strong: #3a3830; /* emphasized border */
+  --color-hairline: #ffffff14; /* top-lit highlight on panels */
 
   /* Text */
-  --color-ink: #f2efe7; /* primary */
-  --color-ink-secondary: #a5a094; /* secondary */
-  --color-ink-muted: #716c60; /* metadata, disabled */
+  --color-ink: #f6f3ec; /* primary */
+  --color-ink-secondary: #aca698; /* secondary */
+  --color-ink-muted: #726c60; /* metadata, disabled */
 
-  /* Accent — Creator brass. One accent, used sparingly. */
-  --color-accent: #d2b25e;
-  --color-accent-hover: #e2c87f;
-  --color-accent-ink: #171205; /* text on accent */
+  /* Accent — Creator brass. One accent, used with intent. */
+  --color-accent: #d8b866;
+  --color-accent-hover: #e7cd88;
+  --color-accent-ink: #191204; /* text on accent */
+  --color-accent-soft: #d8b8661f; /* low-alpha wash for tints/glows */
 
   /* Status */
-  --color-ok: #93bd82; /* ready / success */
-  --color-info: #8ca9d8; /* processing / informational */
-  --color-warn: #d9a54c; /* attention */
-  --color-danger: #d97b6c; /* failure / destructive */
+  --color-ok: #9ecb87; /* ready / success */
+  --color-info: #8fb0e0; /* processing / informational */
+  --color-warn: #e0ab54; /* attention */
+  --color-danger: #e08575; /* failure / destructive */
 
-  /* Radii — restrained; nothing floats as a giant rounded card. */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
+  /* Radii — restrained but modern. */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 22px;
+
+  /* Elevation — soft, dark, with a hairline top highlight for depth. */
+  --shadow-panel:
+    inset 0 1px 0 0 #ffffff0d, 0 1px 2px 0 #00000066,
+    0 12px 32px -16px #000000cc;
+  --shadow-lift: 0 20px 50px -20px #000000e6;
+  --shadow-glow: 0 0 0 1px #d8b86633, 0 8px 30px -10px #d8b86626;
+
+  /* Motion */
+  --animate-fade-up: fade-up 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
@@ -65,16 +83,88 @@ body {
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-  background: rgb(210 178 94 / 0.3);
+  background: rgb(216 184 102 / 0.28);
   color: #fdfaf2;
 }
 
 /* Timecodes, durations, counts. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* A raised panel: surface + hairline top highlight + soft shadow. */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-edge);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Ambient brass glow, anchored top-center, for focal surfaces. */
+.ambient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    72% 55% at 50% -8%,
+    rgb(216 184 102 / 0.08),
+    transparent 68%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Faint dotted grid texture for large empty canvases. */
+.dot-grid {
+  background-image: radial-gradient(
+    rgb(255 255 255 / 0.025) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulsing ring for the active pipeline node. */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(143 176 224 / 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgb(143 176 224 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(143 176 224 / 0);
+  }
+}
+.pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.66, 0, 0, 1) infinite;
+}
+
+/* Indeterminate progress sweep. */
+@keyframes sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+.sweep {
+  animation: sweep 1.8s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
