@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AuthCard } from "@/components/auth/auth-card";
+import { AuthPage } from "@/components/auth/auth-page";
 import { createClient } from "@/src/lib/supabase/server";
 
 export default async function LoginPage() {
@@ -20,5 +20,5 @@ export default async function LoginPage() {
     redirect("/app");
   }
 
-  return <AuthCard mode="login" />;
+  return <AuthPage mode="login" />;
 }
