@@ -51,7 +51,8 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | `applied/001_supabase_foundation.sql`     | **Applied** — executed successfully in the Supabase SQL Editor       |
 | `applied/002_channels_and_characters.sql` | **Applied** — executed successfully in the Supabase SQL Editor       |
 | `applied/003_assets.sql`                  | **Applied** — executed successfully in the Supabase SQL Editor       |
-| `migrations/004_processing_jobs.sql`      | **Pending** — has not been executed against the Supabase project yet |
+| `applied/004_processing_jobs.sql`         | **Applied** — executed successfully in the Supabase SQL Editor       |
+| `migrations/005_grant_authenticated_access.sql` | **Pending** — has not been executed against the Supabase project yet |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
@@ -59,7 +60,9 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 
 `003_assets.sql` added the `asset_type`/`asset_status` enums and the `assets` table (private R2 object metadata: original gameplay sources now, generated media later) with owner-scoped read-only RLS, one-active-original-per-project enforcement, and `projects.source_asset_id`.
 
-`004_processing_jobs.sql` adds the Postgres job queue: `job_type`/`job_status` enums, the `processing_jobs` table (users have no direct access), the sanitized `public_user_jobs` view, user RPCs `enqueue_job`/`retry_job`, worker RPCs `claim_next_job`/`start_job`/`heartbeat_job`/`complete_job`/`fail_job` (service_role only), and `assets.created_by_job_id`.
+`004_processing_jobs.sql` added the Postgres job queue: `job_type`/`job_status` enums, the `processing_jobs` table (users have no direct access), the sanitized `public_user_jobs` view, user RPCs `enqueue_job`/`retry_job`, worker RPCs `claim_next_job`/`start_job`/`heartbeat_job`/`complete_job`/`fail_job` (service_role only), and `assets.created_by_job_id`.
+
+`005_grant_authenticated_access.sql` grants the `authenticated` role explicit privileges on the user-facing tables, the `public_user_jobs` view, and the user job RPCs. Supabase usually sets these via default privileges, but that did not apply to the migration-created tables in this project, which blocked the app from reading channels/characters/assets even though the tables and RLS policies exist. RLS remains the real gate; `processing_jobs` and the worker RPCs stay service_role-only.
 
 ## After applying a migration
 
