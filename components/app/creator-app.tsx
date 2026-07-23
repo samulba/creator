@@ -9,6 +9,7 @@ import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { cx } from "@/components/ui/cx";
 import { deleteProject, setProjectArchived } from "@/src/lib/actions/projects";
 import type {
+  AssetRow,
   ChannelRow,
   CharacterRow,
   ProjectCreativeSettingsRow,
@@ -101,8 +102,13 @@ type CreatorAppProps = {
   settings: ProjectCreativeSettingsRow[];
   channels: ChannelRow[];
   characters: CharacterRow[];
+  sourceAssets: AssetRow[];
   /** False while migration 002 has not been applied to the database yet. */
   schemaReady: boolean;
+  /** False while migration 003 has not been applied to the database yet. */
+  assetsReady: boolean;
+  /** False while the R2_* environment variables are absent. */
+  storageConfigured: boolean;
 };
 
 export function CreatorApp({
@@ -111,7 +117,10 @@ export function CreatorApp({
   settings,
   channels,
   characters,
+  sourceAssets,
   schemaReady,
+  assetsReady,
+  storageConfigured,
 }: CreatorAppProps) {
   const router = useRouter();
   const [view, setView] = useState<"projects" | "preview">("projects");
@@ -131,6 +140,14 @@ export function CreatorApp({
     }
     return map;
   }, [settings]);
+
+  const sourceAssetByProject = useMemo(() => {
+    const map = new Map<string, AssetRow>();
+    for (const asset of sourceAssets) {
+      map.set(asset.project_id, asset);
+    }
+    return map;
+  }, [sourceAssets]);
 
   const channelNameById = useMemo(
     () => new Map(channels.map((channel) => [channel.id, channel.name])),
@@ -304,13 +321,24 @@ export function CreatorApp({
                     {selectedProject.title}
                   </h2>
                   <p className="mt-1.5 text-sm text-ink-secondary">
-                    {pipelineDisplay[selectedProject.pipeline_state].activity}
+                    {selectedProject.pipeline_state === "draft" &&
+                    sourceAssetByProject.get(selectedProject.id)?.status ===
+                      "available"
+                      ? "Source uploaded — processing arrives with Phase 3"
+                      : pipelineDisplay[selectedProject.pipeline_state]
+                          .activity}
                   </p>
                 </header>
                 <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-8">
                   <ProjectDraft
                     project={selectedProject}
                     settings={settingsByProject.get(selectedProject.id) ?? null}
+                    sourceAsset={
+                      sourceAssetByProject.get(selectedProject.id) ?? null
+                    }
+                    storageConfigured={storageConfigured}
+                    assetsReady={assetsReady}
+                    onRefresh={() => router.refresh()}
                     channelName={
                       selectedProject.channel_id
                         ? (channelNameById.get(selectedProject.channel_id) ??

@@ -57,7 +57,7 @@ Status: **Done.**
 
 # Phase 1 — Web Application Core
 
-Status: 1.1 (shell + design system), 1.2 (Supabase foundation, migration 001 applied), and 1.3 (authentication) are **done**. 1.4 and 1.5 are the current work.
+Status: **Phase 1 is done** — 1.1 (shell + design system), 1.2 (Supabase foundation, migration 001), 1.3 (authentication), 1.4 (real project model), and 1.5 (channels & characters, migration 002).
 
 ## 1.1 Application Shell
 
@@ -127,14 +127,16 @@ Make per-channel consistency structural (see `docs/CHANNEL_CHARACTER_MODEL.md`):
 
 # Phase 2 — Storage and Uploads
 
+Status: 2.1 and 2.2 are **done** (migration 003, server-only R2 abstraction, direct multipart browser uploads with real progress and per-part retries). 2.3 is partially done: upload completion is verified server-side (HEAD + size check) and asset state is tracked; media probing and validation **job creation** are deliberately deferred to Phases 3/4 where the job system and worker exist.
+
 ## 2.1 Cloudflare R2 Foundation
 
 Add:
 
 * private object storage
-* secure credentials
+* secure credentials (`R2_*` env vars, server-only in `src/lib/storage/`)
 * storage abstraction
-* asset metadata model
+* asset metadata model (`assets` table, migration 003)
 
 ---
 
@@ -142,14 +144,16 @@ Add:
 
 Implement:
 
-* direct browser-to-storage upload
-* upload progress
-* failure recovery
-* large-file support
-* resumable or multipart upload architecture
-* secure project ownership validation
+* direct browser-to-storage upload (presigned multipart part URLs)
+* upload progress (real transfer progress)
+* failure recovery (per-part retries, abort frees the source slot)
+* large-file support (up to 32 GB, 32 MiB parts)
+* multipart upload architecture
+* secure project ownership validation (server actions + RLS)
 
 Do not route large video files through normal Vercel request handlers.
+
+Operational requirement: the private R2 bucket needs a CORS rule for the app origin (methods PUT/GET, ExposeHeaders ETag) — see `.env.example`.
 
 ---
 
@@ -157,10 +161,10 @@ Do not route large video files through normal Vercel request handlers.
 
 Add:
 
-* upload completion validation
-* file metadata
-* source asset state
-* validation job creation
+* upload completion validation (done: server-side HEAD + size verification)
+* file metadata (done: size/content type; media probe data comes from the Phase 4 worker)
+* source asset state (done)
+* validation job creation (deferred to Phase 3 — requires the job system)
 
 ---
 

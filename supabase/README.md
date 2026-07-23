@@ -46,14 +46,17 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 
 ## Current state
 
-| Migration                                    | Status                                                               |
-| -------------------------------------------- | -------------------------------------------------------------------- |
-| `applied/001_supabase_foundation.sql`        | **Applied** — executed successfully in the Supabase SQL Editor       |
-| `migrations/002_channels_and_characters.sql` | **Pending** — has not been executed against the Supabase project yet |
+| Migration                                 | Status                                                               |
+| ----------------------------------------- | -------------------------------------------------------------------- |
+| `applied/001_supabase_foundation.sql`     | **Applied** — executed successfully in the Supabase SQL Editor       |
+| `applied/002_channels_and_characters.sql` | **Applied** — executed successfully in the Supabase SQL Editor       |
+| `migrations/003_assets.sql`               | **Pending** — has not been executed against the Supabase project yet |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
-`002_channels_and_characters.sql` adds the `characters` (reusable narrator identities: voice + speech style) and `channels` (YouTube channel defaults + edit style) tables with owner-scoped RLS, plus `projects.channel_id`, `project_creative_settings.character_id` / `edit_style`, and `profiles.default_character_id`.
+`002_channels_and_characters.sql` added the `characters` (reusable narrator identities: voice + speech style) and `channels` (YouTube channel defaults + edit style) tables with owner-scoped RLS, plus `projects.channel_id`, `project_creative_settings.character_id` / `edit_style`, and `profiles.default_character_id`.
+
+`003_assets.sql` adds the `asset_type`/`asset_status` enums and the `assets` table (private R2 object metadata: original gameplay sources now, generated media later) with owner-scoped read-only RLS, one-active-original-per-project enforcement, and `projects.source_asset_id`.
 
 ## After applying a migration
 

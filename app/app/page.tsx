@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 
 import { CreatorApp } from "@/components/app/creator-app";
 import { getServerAuthState } from "@/src/lib/auth/session";
+import { getOptionalStorageConfig } from "@/src/lib/storage/config";
 import { createClient } from "@/src/lib/supabase/server";
 import type {
+  AssetRow,
   ChannelRow,
   CharacterRow,
   ProjectCreativeSettingsRow,
@@ -55,7 +57,9 @@ export default async function AppPage() {
   let settings: ProjectCreativeSettingsRow[] = [];
   let channels: ChannelRow[] = [];
   let characters: CharacterRow[] = [];
+  let sourceAssets: AssetRow[] = [];
   let schemaReady = true;
+  let assetsReady = true;
 
   // Channels/characters exist only after migration 002 has been applied
   // manually; a missing relation must degrade to a clear notice, not a 500.
@@ -92,6 +96,19 @@ export default async function AppPage() {
     characters = charactersResult.data ?? [];
     projects = projectsResult.data ?? [];
     settings = settingsResult.data ?? [];
+
+    // Assets exist only after migration 003; degrade to a clear notice.
+    const assetsResult = await supabase
+      .from("assets")
+      .select("*")
+      .eq("asset_type", "original_source")
+      .is("deleted_at", null);
+
+    if (assetsResult.error) {
+      assetsReady = false;
+    } else {
+      sourceAssets = assetsResult.data;
+    }
   }
 
   return (
@@ -101,7 +118,10 @@ export default async function AppPage() {
       settings={settings}
       channels={channels}
       characters={characters}
+      sourceAssets={sourceAssets}
       schemaReady={schemaReady}
+      assetsReady={assetsReady}
+      storageConfigured={Boolean(getOptionalStorageConfig())}
     />
   );
 }

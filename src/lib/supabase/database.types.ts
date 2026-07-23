@@ -23,6 +23,25 @@ export type ProjectPipelineState =
   | "archived"
   | "deleting";
 
+export type AssetType =
+  | "original_source"
+  | "proxy_video"
+  | "extracted_audio"
+  | "frame_samples"
+  | "narration_audio"
+  | "intermediate_render"
+  | "final_video"
+  | "captions"
+  | "preview_image";
+
+export type AssetStatus =
+  | "pending"
+  | "uploading"
+  | "available"
+  | "failed"
+  | "delete_pending"
+  | "deleted";
+
 export type CreativeDirection =
   "balanced" | "funnier" | "more_dramatic" | "more_analytical";
 export type Pacing = "relaxed" | "balanced" | "tight";
@@ -76,6 +95,7 @@ export type Database = {
           description: string | null;
           pipeline_state: ProjectPipelineState;
           channel_id: string | null;
+          source_asset_id: string | null;
           target_language: string;
           failure_code: string | null;
           failure_message: string | null;
@@ -92,6 +112,7 @@ export type Database = {
           description?: string | null;
           pipeline_state?: ProjectPipelineState;
           channel_id?: string | null;
+          source_asset_id?: string | null;
           target_language?: string;
           failure_code?: string | null;
           failure_message?: string | null;
@@ -108,6 +129,7 @@ export type Database = {
           description?: string | null;
           pipeline_state?: ProjectPipelineState;
           channel_id?: string | null;
+          source_asset_id?: string | null;
           target_language?: string;
           failure_code?: string | null;
           failure_message?: string | null;
@@ -167,6 +189,42 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["characters"]["Row"]>;
         Relationships: [];
       };
+      assets: {
+        Row: {
+          id: string;
+          project_id: string;
+          asset_type: AssetType;
+          status: AssetStatus;
+          storage_provider: "r2";
+          bucket: string;
+          object_key: string;
+          original_filename: string | null;
+          content_type: string | null;
+          byte_size: number | null;
+          checksum_sha256: string | null;
+          duration_ms: number | null;
+          width: number | null;
+          height: number | null;
+          frame_rate: number | null;
+          video_codec: string | null;
+          audio_codec: string | null;
+          /** App-validated object: upload details now, probe results later. */
+          metadata: Json;
+          available_at: string | null;
+          delete_requested_at: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["assets"]["Row"]> & {
+          project_id: string;
+          asset_type: AssetType;
+          bucket: string;
+          object_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["assets"]["Row"]>;
+        Relationships: [];
+      };
       channels: {
         Row: {
           id: string;
@@ -197,7 +255,11 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
-    Enums: { project_pipeline_state: ProjectPipelineState };
+    Enums: {
+      project_pipeline_state: ProjectPipelineState;
+      asset_type: AssetType;
+      asset_status: AssetStatus;
+    };
     CompositeTypes: Record<string, never>;
   };
 };
@@ -208,3 +270,4 @@ export type ProjectCreativeSettingsRow =
   Database["public"]["Tables"]["project_creative_settings"]["Row"];
 export type CharacterRow = Database["public"]["Tables"]["characters"]["Row"];
 export type ChannelRow = Database["public"]["Tables"]["channels"]["Row"];
+export type AssetRow = Database["public"]["Tables"]["assets"]["Row"];
