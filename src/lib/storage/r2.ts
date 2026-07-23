@@ -31,6 +31,13 @@ function getClient(config: StorageConfig): S3Client {
           accessKeyId: config.accessKeyId,
           secretAccessKey: config.secretAccessKey,
         },
+        // Recent AWS SDK versions add a default request checksum
+        // (x-amz-checksum-crc32) to signed URLs. A browser doing a direct
+        // PUT never sends that header, so R2 rejects the part and the
+        // upload fails. Only compute checksums when an operation requires
+        // one, which keeps presigned part URLs signable by the browser.
+        requestChecksumCalculation: "WHEN_REQUIRED",
+        responseChecksumValidation: "WHEN_REQUIRED",
       }),
     };
   }

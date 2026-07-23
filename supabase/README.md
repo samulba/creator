@@ -46,13 +46,13 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 
 ## Current state
 
-| Migration                                 | Status                                                               |
-| ----------------------------------------- | -------------------------------------------------------------------- |
-| `applied/001_supabase_foundation.sql`     | **Applied** — executed successfully in the Supabase SQL Editor       |
-| `applied/002_channels_and_characters.sql` | **Applied** — executed successfully in the Supabase SQL Editor       |
-| `applied/003_assets.sql`                  | **Applied** — executed successfully in the Supabase SQL Editor       |
-| `applied/004_processing_jobs.sql`         | **Applied** — executed successfully in the Supabase SQL Editor       |
-| `applied/005_grant_authenticated_access.sql` | **Applied** — executed successfully in the Supabase SQL Editor       |
+| Migration                                    | Status                                                         |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| `applied/001_supabase_foundation.sql`        | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/002_channels_and_characters.sql`    | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/003_assets.sql`                     | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/004_processing_jobs.sql`            | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/005_grant_authenticated_access.sql` | **Applied** — executed successfully in the Supabase SQL Editor |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
