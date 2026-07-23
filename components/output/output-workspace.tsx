@@ -1,0 +1,42 @@
+export function OutputWorkspace() {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="rounded-xl border border-white/8 bg-white/[0.025] p-5">
+        <p className="text-sm text-sky-200">Final Video · Ready</p>
+        <div className="mt-4 aspect-video rounded-lg bg-black/35" />
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button className="rounded-md bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300">
+            Download
+          </button>
+          <button className="rounded-md border border-white/10 px-4 py-2 text-sm hover:bg-white/5">
+            Create New Version
+          </button>
+        </div>
+      </section>
+
+      <aside className="space-y-3">
+        <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+          <p className="text-xs text-stone-500">Output</p>
+          <p className="mt-2 text-sm">1440p · 10:42</p>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+          <p className="text-xs text-stone-500">Title suggestions</p>
+          <ul className="mt-2 space-y-2 text-sm text-stone-300">
+            <li>The Ghost Face Who Wouldn’t Leave Me Alone</li>
+            <li>He Threw the Match for One Chase</li>
+          </ul>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+          <p className="text-xs text-stone-500">Description draft</p>
+          <p className="mt-2 text-sm text-stone-300">
+            A Dead by Daylight match where one Ghost Face chase becomes the entire story.
+          </p>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+          <p className="text-xs text-stone-500">Thumbnail concept</p>
+          <div className="mt-3 aspect-video rounded-md border border-white/8 bg-slate-950" />
+        </div>
+      </aside>
+    </div>
+  );
+}
