@@ -53,6 +53,8 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | `applied/003_assets.sql`                     | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/004_processing_jobs.sql`            | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/005_grant_authenticated_access.sql` | **Applied** — executed successfully in the Supabase SQL Editor |
+| `migrations/006_grant_service_role_access.sql` | **Pending** — needed before the video worker can run |
+| `migrations/007_analysis_foundation.sql` | **Pending** — Phase 5 analysis data model |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
@@ -63,6 +65,10 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 `004_processing_jobs.sql` added the Postgres job queue: `job_type`/`job_status` enums, the `processing_jobs` table (users have no direct access), the sanitized `public_user_jobs` view, user RPCs `enqueue_job`/`retry_job`, worker RPCs `claim_next_job`/`start_job`/`heartbeat_job`/`complete_job`/`fail_job` (service_role only), and `assets.created_by_job_id`.
 
 `005_grant_authenticated_access.sql` grants the `authenticated` role explicit privileges on the user-facing tables, the `public_user_jobs` view, and the user job RPCs. Supabase usually sets these via default privileges, but that did not apply to the migration-created tables in this project, which blocked the app from reading channels/characters/assets even though the tables and RLS policies exist. RLS remains the real gate; `processing_jobs` and the worker RPCs stay service_role-only.
+
+`006_grant_service_role_access.sql` grants the `service_role` full access to the public schema (current and future tables), matching Supabase's intended backend-role setup. The video worker connects with the service_role key and does direct table reads/writes; without this it would hit the same missing-default-privilege gap as 005 and fail with "permission denied". **Apply this before deploying the worker.**
+
+`007_analysis_foundation.sql` adds the `analysis_run_status` enum and the `analysis_runs`, `gameplay_events`, `candidate_moments`, and `candidate_moment_events` tables — the data model the AI analysis writes into (Phase 5). Owner-scoped read-only RLS for `authenticated`; writes come from the worker (service_role) or later server RPCs.
 
 ## After applying a migration
 
