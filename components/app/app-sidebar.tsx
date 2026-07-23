@@ -1,29 +1,26 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { Wordmark } from "@/components/ui/wordmark";
 import { cx } from "@/components/ui/cx";
 
 type SidebarView = "projects" | "preview" | "settings";
 
-const itemClass = (active: boolean) =>
-  cx(
-    "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
-    active
-      ? "bg-raised font-medium text-ink"
-      : "text-ink-secondary hover:bg-raised/70 hover:text-ink",
-  );
+function initials(email: string): string {
+  const name = email.split("@")[0] ?? email;
+  const parts = name.split(/[._+-]+/).filter(Boolean);
+  const chars =
+    parts.length >= 2 && parts[0] && parts[1]
+      ? parts[0][0] + parts[1][0]
+      : name.slice(0, 2);
+  return chars.toUpperCase();
+}
 
-function Icon({ name, active }: { name: string; active: boolean }) {
-  const cls = cx(
-    "h-4 w-4 shrink-0 transition-colors",
-    active ? "text-accent" : "text-ink-muted group-hover:text-ink-secondary",
-  );
+function Icon({ name }: { name: string }) {
   const common = {
-    className: cls,
+    className: "h-[18px] w-[18px]",
     viewBox: "0 0 16 16",
     fill: "none",
     stroke: "currentColor",
@@ -61,9 +58,26 @@ function Icon({ name, active }: { name: string; active: boolean }) {
   );
 }
 
+const railItem = (active: boolean) =>
+  cx(
+    "group relative flex h-10 w-10 items-center justify-center rounded-xl border transition-colors",
+    active
+      ? "border-accent/40 bg-accent/15 text-accent"
+      : "border-transparent text-ink-muted hover:bg-raised hover:text-ink",
+  );
+
+function Tooltip({ label }: { label: string }) {
+  return (
+    <span className="pointer-events-none absolute left-full z-50 ml-2 hidden -translate-y-1/2 rounded-md border border-edge bg-overlay px-2 py-1 text-xs whitespace-nowrap text-ink opacity-0 shadow-panel transition-opacity group-hover:opacity-100 lg:top-1/2 lg:block">
+      {label}
+    </span>
+  );
+}
+
 /**
- * Shared application sidebar. Inside the workspace, Projects/Preview switch
- * client-side via onNavigate; from other routes they render as links.
+ * Slim application icon rail. A single elegant navigation strip (not a second
+ * text menu), with the brand mark on top, icon nav with tooltips, and a user
+ * avatar menu at the bottom. On small screens it collapses to a top bar.
  */
 export function AppSidebar({
   userEmail,
@@ -76,98 +90,162 @@ export function AppSidebar({
   onNavigate?: (view: "projects" | "preview") => void;
   onNewVideo?: () => void;
 }) {
-  const navButton = (
-    view: "projects" | "preview" | null,
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const navNode = (
+    key: string,
     icon: string,
     label: string,
+    isActive: boolean,
     onClick?: () => void,
-  ): ReactNode => {
-    const isActive = view !== null && active === view;
-    return (
+    href?: string,
+  ) => {
+    const content = (
+      <>
+        <Icon name={icon} />
+        <Tooltip label={label} />
+      </>
+    );
+    return href ? (
+      <Link
+        key={key}
+        href={href}
+        aria-label={label}
+        aria-current={isActive ? "page" : undefined}
+        className={railItem(isActive)}
+      >
+        {content}
+      </Link>
+    ) : (
       <button
-        className={itemClass(isActive)}
+        key={key}
+        type="button"
+        aria-label={label}
         aria-current={isActive ? "page" : undefined}
         onClick={onClick}
+        className={railItem(isActive)}
       >
-        <Icon name={icon} active={isActive} />
-        {label}
+        {content}
       </button>
     );
   };
 
   return (
-    <aside className="flex items-center justify-between border-b border-edge bg-sunken/40 px-5 py-3 lg:w-56 lg:shrink-0 lg:flex-col lg:items-stretch lg:justify-start lg:border-r lg:border-b-0 lg:px-0 lg:py-0">
-      <div className="lg:border-b lg:border-edge lg:px-5 lg:py-5">
-        <Wordmark />
-        <p className="mt-1 hidden text-xs text-ink-muted lg:block">
-          Video production studio
-        </p>
-      </div>
+    <aside className="flex items-center justify-between border-b border-edge bg-sunken/50 px-4 py-2.5 lg:w-[68px] lg:shrink-0 lg:flex-col lg:items-center lg:justify-start lg:gap-1 lg:border-r lg:border-b-0 lg:px-0 lg:py-4">
+      {/* Brand mark */}
+      <Link
+        href="/app"
+        aria-label="Creator"
+        className="flex items-center gap-2 lg:mb-3 lg:h-10 lg:w-10 lg:justify-center"
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-accent/40 bg-accent/15 lg:h-9 lg:w-9">
+          <span className="text-sm font-bold tracking-tight text-accent">
+            C
+          </span>
+        </span>
+        <span className="text-base font-semibold tracking-tight text-ink lg:hidden">
+          Creator
+        </span>
+      </Link>
 
-      <nav className="hidden flex-1 space-y-1 px-3 py-4 lg:block">
-        {onNavigate ? (
-          navButton("projects", "projects", "Projects", () =>
-            onNavigate("projects"),
-          )
-        ) : (
-          <Link
-            href="/app"
-            className={itemClass(active === "projects")}
-            aria-current={active === "projects" ? "page" : undefined}
-          >
-            <Icon name="projects" active={active === "projects"} />
-            Projects
-          </Link>
+      {/* Nav — desktop rail */}
+      <nav className="hidden flex-1 flex-col items-center gap-1.5 lg:flex">
+        {onNavigate
+          ? navNode(
+              "projects",
+              "projects",
+              "Projects",
+              active === "projects",
+              () => onNavigate("projects"),
+            )
+          : navNode(
+              "projects",
+              "projects",
+              "Projects",
+              active === "projects",
+              undefined,
+              "/app",
+            )}
+        {onNewVideo
+          ? navNode("new", "new", "New video", false, onNewVideo)
+          : navNode("new", "new", "New video", false, undefined, "/app")}
+        {onNavigate
+          ? navNode(
+              "preview",
+              "preview",
+              "Product preview",
+              active === "preview",
+              () => onNavigate("preview"),
+            )
+          : navNode(
+              "preview",
+              "preview",
+              "Product preview",
+              active === "preview",
+              undefined,
+              "/app",
+            )}
+        {navNode(
+          "settings",
+          "settings",
+          "Settings",
+          active === "settings",
+          undefined,
+          "/app/settings",
         )}
-
-        {onNewVideo ? (
-          navButton(null, "new", "New video", onNewVideo)
-        ) : (
-          <Link href="/app" className={itemClass(false)}>
-            <Icon name="new" active={false} />
-            New video
-          </Link>
-        )}
-
-        {onNavigate ? (
-          navButton("preview", "preview", "Product preview", () =>
-            onNavigate("preview"),
-          )
-        ) : (
-          <Link href="/app" className={itemClass(active === "preview")}>
-            <Icon name="preview" active={active === "preview"} />
-            Product preview
-          </Link>
-        )}
-
-        <Link
-          href="/app/settings"
-          className={itemClass(active === "settings")}
-          aria-current={active === "settings" ? "page" : undefined}
-        >
-          <Icon name="settings" active={active === "settings"} />
-          Settings
-        </Link>
       </nav>
 
-      <div className="hidden border-t border-edge px-5 py-4 lg:block">
-        <p className="text-[11px] tracking-wider text-ink-muted uppercase">
-          Signed in
-        </p>
-        <p className="selectable mt-1.5 truncate text-xs text-ink-secondary">
-          {userEmail}
-        </p>
-        <form action="/auth/signout" method="post" className="mt-3">
-          <button
-            type="submit"
-            className="text-xs text-ink-muted transition-colors hover:text-ink"
-          >
-            Log out
-          </button>
-        </form>
+      {/* User avatar menu — desktop */}
+      <div className="relative hidden lg:block">
+        <button
+          type="button"
+          aria-label="Account menu"
+          onClick={() => setMenuOpen((open) => !open)}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-edge-strong bg-raised text-xs font-semibold text-ink transition-colors hover:border-accent/50"
+        >
+          {initials(userEmail)}
+        </button>
+        {menuOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setMenuOpen(false)}
+            />
+            <div className="panel absolute bottom-0 left-full z-50 ml-3 w-60 overflow-hidden p-1.5">
+              <div className="px-3 py-2">
+                <p className="text-[11px] tracking-wider text-ink-muted uppercase">
+                  Signed in
+                </p>
+                <p className="selectable mt-1 truncate text-sm text-ink">
+                  {userEmail}
+                </p>
+              </div>
+              <div className="my-1 h-px bg-edge" />
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-secondary transition-colors hover:bg-raised hover:text-ink"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 14H3.5A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2H6M10.5 11l3-3-3-3M13.5 8H6" />
+                  </svg>
+                  Log out
+                </button>
+              </form>
+            </div>
+          </>
+        ) : null}
       </div>
 
-      {/* Compact actions on small screens */}
+      {/* Compact actions — small screens */}
       <div className="flex items-center gap-2 lg:hidden">
         {active === "settings" ? (
           <Link href="/app" className="text-sm text-ink-secondary">

@@ -357,23 +357,33 @@ export function CreatorApp({
 
             {selectedProject ? (
               <>
-                <header className="relative z-10 border-b border-edge bg-canvas px-5 pt-5 pb-5 sm:px-8 sm:pt-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <StatusBadge
-                      tone={
-                        pipelineDisplay[selectedProject.pipeline_state].tone
-                      }
-                      label={
-                        pipelineDisplay[selectedProject.pipeline_state].label
-                      }
-                    />
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-ink-muted">
+                <header className="relative z-10 border-b border-edge bg-canvas px-5 pt-5 pb-6 sm:px-8 sm:pt-6">
+                  {/* Breadcrumb + actions */}
+                  <div className="flex items-center justify-between gap-3">
+                    <nav className="flex min-w-0 items-center gap-1.5 text-xs text-ink-muted">
+                      <span>Projects</span>
+                      {selectedProject.channel_id &&
+                      channelNameById.get(selectedProject.channel_id) ? (
+                        <>
+                          <span
+                            aria-hidden="true"
+                            className="text-ink-muted/50"
+                          >
+                            /
+                          </span>
+                          <span className="truncate text-ink-secondary">
+                            {channelNameById.get(selectedProject.channel_id)}
+                          </span>
+                        </>
+                      ) : null}
+                    </nav>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="hidden text-xs text-ink-muted sm:inline">
                         Updated {selectedProject.updated_at.slice(0, 10)}
                       </span>
                       {confirmingDelete ? (
                         <span className="flex items-center gap-2">
-                          <span className="text-xs text-ink-muted">
+                          <span className="hidden text-xs text-ink-muted sm:inline">
                             Delete this project?
                           </span>
                           <Button
@@ -404,28 +414,52 @@ export function CreatorApp({
                           </Button>
                         </span>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
+                        <button
+                          type="button"
+                          aria-label="Delete project"
                           disabled={pending}
                           onClick={() => setConfirmingDelete(true)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-ink-muted transition-colors hover:border-edge hover:bg-raised hover:text-danger disabled:opacity-50"
                         >
-                          Delete
-                        </Button>
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M2.5 4h11M6 4V2.5h4V4M4.5 4l.5 9h6l.5-9M6.5 6.5v4M9.5 6.5v4" />
+                          </svg>
+                        </button>
                       )}
                     </div>
                   </div>
-                  <h2 className="mt-3.5 max-w-3xl text-2xl font-semibold tracking-tight text-ink sm:text-[26px]">
+
+                  {/* Title + live status */}
+                  <h2 className="mt-4 max-w-3xl text-[26px] leading-tight font-semibold tracking-tight text-ink sm:text-3xl">
                     {selectedProject.title}
                   </h2>
-                  <p className="mt-1.5 text-sm text-ink-secondary">
-                    {selectedProject.pipeline_state === "draft" &&
-                    sourceAssetByProject.get(selectedProject.id)?.status ===
-                      "available"
-                      ? "Source uploaded — processing arrives with Phase 3"
-                      : pipelineDisplay[selectedProject.pipeline_state]
-                          .activity}
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <StatusBadge
+                      tone={
+                        pipelineDisplay[selectedProject.pipeline_state].tone
+                      }
+                      label={
+                        pipelineDisplay[selectedProject.pipeline_state].label
+                      }
+                      pulse={LIVE_STATES.has(selectedProject.pipeline_state)}
+                    />
+                    <span className="text-sm text-ink-secondary">
+                      {selectedProject.pipeline_state === "draft" &&
+                      sourceAssetByProject.get(selectedProject.id)?.status ===
+                        "available"
+                        ? "Source uploaded — ready to process"
+                        : pipelineDisplay[selectedProject.pipeline_state]
+                            .activity}
+                    </span>
+                  </div>
                 </header>
                 <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-8">
                   {selectedProject.pipeline_state !== "draft" &&
