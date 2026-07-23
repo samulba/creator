@@ -1,26 +1,35 @@
-import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { cx } from "@/components/ui/cx";
 
-import { statusTone, type DemoProject } from "./demo-data";
+export type ProjectListItem = {
+  id: string;
+  title: string;
+  statusLabel: string;
+  statusTone: StatusTone;
+  /** Right-aligned metadata on the first row, e.g. a duration. */
+  trailing?: string;
+  /** Right-aligned metadata on the second row, e.g. last update. */
+  updated: string;
+};
 
 export function ProjectsList({
-  projects,
+  items,
   selectedId,
   onSelect,
 }: {
-  projects: DemoProject[];
+  items: ProjectListItem[];
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
   return (
     <ul>
-      {projects.map((project) => {
-        const isSelected = project.id === selectedId;
+      {items.map((item) => {
+        const isSelected = item.id === selectedId;
 
         return (
-          <li key={project.id} className="border-b border-edge">
+          <li key={item.id} className="border-b border-edge">
             <button
-              onClick={() => onSelect(project.id)}
+              onClick={() => onSelect(item.id)}
               aria-current={isSelected ? "true" : undefined}
               className={cx(
                 "relative w-full px-5 py-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
@@ -40,22 +49,17 @@ export function ProjectsList({
                     isSelected ? "font-medium text-ink" : "text-ink-secondary",
                   )}
                 >
-                  {project.title}
+                  {item.title}
                 </h3>
-                {project.duration ? (
+                {item.trailing ? (
                   <span className="tabular shrink-0 font-mono text-xs text-ink-muted">
-                    {project.duration}
+                    {item.trailing}
                   </span>
                 ) : null}
               </div>
               <div className="mt-2 flex items-center justify-between gap-3">
-                <StatusBadge
-                  tone={statusTone[project.status]}
-                  label={project.status}
-                />
-                <span className="text-xs text-ink-muted">
-                  {project.updated}
-                </span>
+                <StatusBadge tone={item.statusTone} label={item.statusLabel} />
+                <span className="text-xs text-ink-muted">{item.updated}</span>
               </div>
             </button>
           </li>

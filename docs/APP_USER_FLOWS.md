@@ -37,30 +37,25 @@ The project is marked **Approved**, with a downloadable final MP4.
 
 ## New Video Flow
 
-### Inputs required before processing
+### Channel-first
 
-MVP should ask for only:
+The channel is the first input and collapses the rest of the flow: choosing a channel implies the language, narrator character, creative dials, edit style, and target length. The MVP inputs become **gameplay file + channel + optional overrides**.
+
+If the user has no channels yet, the flow points to Settings → "Create a channel first" instead of asking for individual settings.
+
+### Inputs required before processing
 
 1. **Gameplay file**
    - Required.
    - One raw gameplay video.
 
-2. **Language**
-   - Default from user settings or English.
-   - Required only if no default exists.
+2. **Channel**
+   - Required. Defaults to the user's only channel when there is exactly one.
+   - The channel's defaults (language, character, dials, edit style) are shown, not re-asked.
 
-3. **Narrator**
-   - Default narrator selected automatically.
-   - User can change with one compact selector.
-
-4. **Target length**
-   - Default: Auto, targeting approximately 8–15 minutes.
-   - Options: Auto, Shorter, Standard, Longer.
-   - Avoid exact minute sliders in MVP.
-
-5. **Creative direction**
-   - Default: Balanced.
-   - Options: Balanced, Funnier, More Dramatic, More Analytical.
+3. **Optional overrides**
+   - Target length and creative direction can be overridden per video.
+   - Narrator character can be overridden from the user's character library.
 
 ### Inputs that should not be required before processing
 

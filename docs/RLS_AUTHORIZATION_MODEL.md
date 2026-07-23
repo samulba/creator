@@ -101,10 +101,20 @@ Use this predicate for `select` policies unless deleted/tombstoned rows must rem
 
 Recommended implementation: revoke direct table update for sensitive columns from `authenticated` and expose RPCs for stateful actions.
 
+### `characters`
+
+- `select` / `insert` / `update` / `delete`: owner-scoped (`user_id = auth.uid()` in `using` and `with check`).
+- Lifecycle is archive-first. The server refuses hard deletion while the character is referenced by an active project's active settings row; the database additionally nulls references on delete (`on delete set null`).
+
+### `channels`
+
+- `select` / `insert` / `update` / `delete`: owner-scoped, same pattern as `characters`.
+- `default_character_id` cannot reference another user's character: enforced at the database level with a composite FK `(default_character_id, user_id) references characters(id, user_id)` — RLS cannot validate referenced rows and service-role code bypasses RLS. The same pattern protects `projects.channel_id` and `profiles.default_character_id`.
+
 ### `project_creative_settings`
 
 - `select`: owner can read settings for own project.
-- `insert`: owner can create settings only for own project through server/RPC, deriving project ownership and validating enum values.
+- `insert`: owner can create settings only for own project through server/RPC, deriving project ownership and validating enum values. The `with check` additionally requires `character_id` (when set) to reference a character owned by the same user.
 - `update`: direct updates should be avoided; create a new version instead. Workers/server may toggle `is_active`.
 - `delete`: no direct browser delete.
 

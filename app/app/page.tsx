@@ -2,6 +2,13 @@ import { redirect } from "next/navigation";
 
 import { CreatorApp } from "@/components/app/creator-app";
 import { getServerAuthState } from "@/src/lib/auth/session";
+import { createClient } from "@/src/lib/supabase/server";
+import type {
+  ChannelRow,
+  CharacterRow,
+  ProjectCreativeSettingsRow,
+  ProjectRow,
+} from "@/src/lib/supabase/database.types";
 
 // Auth state must be evaluated per request, even when Supabase env is
 // absent at build time.
@@ -42,5 +49,59 @@ export default async function AppPage() {
     redirect("/login");
   }
 
-  return <CreatorApp userEmail={auth.user.email ?? "Creator user"} />;
+  const supabase = await createClient();
+
+  let projects: ProjectRow[] = [];
+  let settings: ProjectCreativeSettingsRow[] = [];
+  let channels: ChannelRow[] = [];
+  let characters: CharacterRow[] = [];
+  let schemaReady = true;
+
+  // Channels/characters exist only after migration 002 has been applied
+  // manually; a missing relation must degrade to a clear notice, not a 500.
+  const channelsResult = await supabase
+    .from("channels")
+    .select("*")
+    .is("archived_at", null)
+    .order("name");
+
+  if (channelsResult.error) {
+    schemaReady = false;
+  } else {
+    channels = channelsResult.data;
+
+    const [charactersResult, projectsResult, settingsResult] =
+      await Promise.all([
+        supabase
+          .from("characters")
+          .select("*")
+          .is("archived_at", null)
+          .order("name"),
+        supabase
+          .from("projects")
+          .select("*")
+          .is("deleted_at", null)
+          .is("archived_at", null)
+          .order("updated_at", { ascending: false }),
+        supabase
+          .from("project_creative_settings")
+          .select("*")
+          .eq("is_active", true),
+      ]);
+
+    characters = charactersResult.data ?? [];
+    projects = projectsResult.data ?? [];
+    settings = settingsResult.data ?? [];
+  }
+
+  return (
+    <CreatorApp
+      userEmail={auth.user.email ?? "Creator user"}
+      projects={projects}
+      settings={settings}
+      channels={channels}
+      characters={characters}
+      schemaReady={schemaReady}
+    />
+  );
 }

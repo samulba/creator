@@ -20,9 +20,7 @@ Do not attempt to build the entire product at once.
 * security rules
 * implementation plan
 
-Status:
-
-In progress.
+Status: **Done.**
 
 ---
 
@@ -53,9 +51,13 @@ Do not yet add:
 * video processing
 * worker infrastructure
 
+Status: **Done.**
+
 ---
 
 # Phase 1 — Web Application Core
+
+Status: 1.1 (shell + design system), 1.2 (Supabase foundation, migration 001 applied), and 1.3 (authentication) are **done**. 1.4 and 1.5 are the current work.
 
 ## 1.1 Application Shell
 
@@ -104,11 +106,22 @@ A project represents one video production workflow.
 
 Initial capabilities:
 
-* create project
+* create project (channel-first, snapshotting channel defaults into settings)
 * view project
 * list projects
 * basic project status
 * delete or archive project where appropriate
+
+---
+
+## 1.5 Channels & Characters
+
+Make per-channel consistency structural (see `docs/CHANNEL_CHARACTER_MODEL.md`):
+
+* migration 002: `characters` + `channels` tables, `projects.channel_id`, settings `character_id`/`edit_style`
+* Settings UI: manage channels and characters (archive-first)
+* New Video flow: channel-first selection, defaults shown not re-asked
+* profile default character
 
 ---
 
@@ -152,6 +165,8 @@ Add:
 ---
 
 # Phase 3 — Job System
+
+Decision: the job queue is Postgres-based (`processing_jobs` table, atomic claims via `for update skip locked` in privileged RPCs, leases for crash recovery). No external queue technology unless Postgres proves insufficient.
 
 ## 3.1 Background Job Model
 
@@ -302,6 +317,13 @@ The script must:
 * preserve strong gameplay moments
 * support humor and pacing
 
+Channel consistency requirements:
+
+* prompt assembly consumes the character's `speech_style` as persona constraints; `example_lines` are the primary style anchor
+* `forbidden_words` are enforced; catchphrases follow a frequency budget
+* prompt templates are versioned in code; every generation records `model_id`, `prompt_template_version`, `character_config_hash`, and sampling parameters in `generation_metadata`
+* the resolved character config is frozen into `script_versions.narrator_config`
+
 ---
 
 # Phase 7 — Voice Engine
@@ -311,10 +333,10 @@ The script must:
 Add:
 
 * secure API integration
-* configured narrator voice
+* narrator voice from the project's character (`voice_key` + `voice_settings`, ElevenLabs model pinned per character — never a "latest" alias)
 * generated audio asset storage
-* metadata
-* error handling
+* metadata (voice config frozen per narration asset; provider request ids stored)
+* error handling (missing/deleted provider voice is a first-class failure code)
 
 ---
 
@@ -347,6 +369,8 @@ Support:
 * freeze frames
 * captions
 * optional effects
+
+Channel consistency requirement: edit planning reads the settings snapshot's `edit_style`; the EDL uses enumerated caption/zoom/transition style tokens, not freeform strings.
 
 ---
 
@@ -409,6 +433,13 @@ Evaluate areas such as:
 * dead time
 * payoff
 
+Channel consistency check family:
+
+* forbidden-word scan against the character
+* catchphrase frequency check
+* tone/style scoring against the character definition
+* later: speaker-similarity regression on narration audio vs a reference sample
+
 Creative QC must not automatically rewrite successful outputs without clear rules.
 
 ---
@@ -419,6 +450,7 @@ Improve the dashboard and project experience.
 
 Add:
 
+* dashboard grouping and filtering by channel
 * processing timeline
 * detailed statuses
 * video preview
@@ -445,6 +477,7 @@ Before considering the initial product stable:
 * dependency review
 * performance review
 * cost review
+* channel consistency regression testing (same character + settings across runs stays on-style)
 
 ---
 

@@ -62,10 +62,8 @@ States:
 
 ### Settings
 
-1. Language.
-2. Narrator.
-3. Target length: Auto, Shorter, Standard, Longer.
-4. Creative direction: Balanced, Funnier, More Dramatic, More Analytical.
+1. Channel (required, first; implies language, narrator character, dials, edit style).
+2. Optional overrides: target length (Auto, Shorter, Standard, Longer), creative direction (Balanced, Funnier, More Dramatic, More Analytical), narrator character.
 
 ### Primary action
 
@@ -221,9 +219,18 @@ Manage rendered versions and downloads.
 
 ### MVP content
 
-- Default language.
-- Default narrator.
-- Default creative direction.
-- Download/export preference if supported.
+Two sections (see `docs/CHANNEL_CHARACTER_MODEL.md`):
 
-Do not include provider keys, billing, or worker settings in normal user settings.
+**Channels**
+
+- List of the user's YouTube channels.
+- Create/edit: name, YouTube handle, description, default character, default language, the five creative dials, edit-style tokens (captions, zooms, transitions, intro/outro).
+- Archive instead of delete in normal use.
+
+**Characters**
+
+- List of the user's narrator characters (reusable across channels).
+- Create/edit: name, description, language, voice (provider voice id + voice settings), speech style (tone, humor level, energy, sentence length, vocabulary notes, catchphrases, forbidden words, and — prominently — example lines).
+- Archive instead of delete; deletion is refused while referenced by active projects.
+
+Do not include provider keys, billing, or worker settings in normal user settings. The ElevenLabs API key never appears here — `voice_key` is a voice identifier, not a credential.

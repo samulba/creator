@@ -63,7 +63,8 @@ Most child tables contain both `project_id` and any specific parent foreign key.
 | `id` | `uuid primary key references auth.users(id) on delete cascade` | Same as Supabase Auth user id. |
 | `display_name` | `text null` | User-visible name. |
 | `default_language` | `text not null default 'en'` | BCP-47 language tag preferred. |
-| `default_narrator_key` | `text null` | Internal narrator identifier, not provider secret. |
+| `default_narrator_key` | `text null` | **Deprecated** — superseded by `default_character_id`; dropped in a later migration. |
+| `default_character_id` | `uuid null` | Composite FK `(default_character_id, id) references characters(id, user_id) on delete set null (default_character_id)`. |
 | `preferences` | `jsonb not null default '{}'` | Small validated app preferences only. |
 | `created_at` | `timestamptz not null default now()` |  |
 | `updated_at` | `timestamptz not null default now()` |  |
@@ -79,6 +80,7 @@ Indexes: primary key only for MVP.
 | `title` | `text not null` | User-visible title. |
 | `description` | `text null` | Optional user notes. |
 | `pipeline_state` | `project_pipeline_state not null default 'draft'` | Canonical internal state. |
+| `channel_id` | `uuid null` | Composite FK `(channel_id, user_id) references channels(id, user_id) on delete set null (channel_id)`. Applied in migration 002. |
 | `source_asset_id` | `uuid null` | FK to `assets.id`, added after assets table exists. Use `on delete set null`. |
 | `active_creative_settings_id` | `uuid null` | FK to `project_creative_settings.id`. |
 | `selected_story_version_id` | `uuid null` | FK to `story_versions.id`. |
@@ -117,6 +119,8 @@ Indexes:
 | `narration_density` | `text not null default 'balanced'` | Check: light/balanced/detailed. |
 | `gameplay_preservation` | `text not null default 'balanced'` | Check: preserve_more/balanced/cut_more_aggressively. |
 | `target_length` | `text not null default 'auto'` | Check: auto/shorter/standard/longer. |
+| `character_id` | `uuid null references characters(id) on delete set null` | Narrator character (by reference until generation). Ownership enforced via RLS `with check` + server validation. Applied in migration 002. |
+| `edit_style` | `jsonb not null default '{}'` | Edit-style snapshot copied from the channel at project creation. Same keys as `channels.edit_style`. Applied in migration 002. |
 | `is_active` | `boolean not null default true` | One active row per project. |
 | `created_by` | `uuid null references auth.users(id) on delete set null` | User or null for system. |
 | `created_at` | `timestamptz not null default now()` |  |
@@ -126,6 +130,46 @@ Constraints/indexes:
 - unique `(project_id, version_number)`
 - unique partial `(project_id) where is_active`
 - index `(project_id, created_at desc)`
+
+### `characters`
+
+Reusable narrator identities — a user-level library shared across channels. See `docs/CHANNEL_CHARACTER_MODEL.md`. Applied in migration 002.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid primary key default gen_random_uuid()` |  |
+| `user_id` | `uuid not null references auth.users(id) on delete cascade` | Owner. |
+| `name` | `text not null` | Check 1–120. Case-insensitive unique per user while not archived. |
+| `description` | `text null` | Check ≤ 2000. |
+| `language` | `text not null default 'en'` | Character's primary language. |
+| `voice_provider` | `text not null default 'elevenlabs'` | Check-constrained text. |
+| `voice_key` | `text null` | Provider voice id (not a secret). Nullable until Phase 7 assigns voices. |
+| `voice_settings` | `jsonb not null default '{}'` | Object. Keys: `model_id`, `stability`, `similarity_boost`, `style`, `speed`. |
+| `speech_style` | `jsonb not null default '{}'` | Object. Keys: `tone`, `humor_level`, `energy`, `sentence_length`, `vocabulary_notes`, `catchphrases[]`, `forbidden_words[]`, `example_lines[]`. |
+| `archived_at` | `timestamptz null` | Archive-first lifecycle. |
+| `created_at` / `updated_at` | `timestamptz not null default now()` | `set_updated_at` trigger. |
+
+Constraints/indexes: `unique (id, user_id)` (composite-FK target), partial unique `(user_id, lower(name)) where archived_at is null`, index `(user_id)`. RLS: owner-scoped select/insert/update/delete.
+
+### `channels`
+
+The user's YouTube channels: creative defaults plus edit-style branding. Applied in migration 002.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `uuid primary key default gen_random_uuid()` |  |
+| `user_id` | `uuid not null references auth.users(id) on delete cascade` | Owner. |
+| `name` | `text not null` | Check 1–120. Case-insensitive unique per user while not archived. |
+| `youtube_handle` | `text null` | Check ≤ 100. |
+| `description` | `text null` | Check ≤ 2000. |
+| `default_character_id` | `uuid null` | Composite FK `(default_character_id, user_id) references characters(id, user_id) on delete set null (default_character_id)` — same-owner enforced at DB level. |
+| `default_language` | `text not null default 'en'` |  |
+| `creative_direction` … `target_length` | as in `project_creative_settings` | The five creative dials, identical checks. Copied by value into settings at project creation. |
+| `edit_style` | `jsonb not null default '{}'` | Object of enumerated tokens. Keys: `caption_style`, `zoom_usage`, `transition_style`, `intro_style`, `outro_style`. |
+| `archived_at` | `timestamptz null` |  |
+| `created_at` / `updated_at` | `timestamptz not null default now()` | `set_updated_at` trigger. |
+
+Constraints/indexes: `unique (id, user_id)`, partial unique `(user_id, lower(name)) where archived_at is null`, index `(user_id)`. RLS: owner-scoped select/insert/update/delete.
 
 ### `assets`
 
@@ -255,9 +299,15 @@ Primary key: `(story_version_id, candidate_moment_id, story_role)`.
 
 ### `script_versions`
 
-Columns: `id`, `project_id`, `story_version_id`, `creative_settings_id`, `version_number`, `status script_status`, `language`, `narrator_key`, `narrator_config jsonb`, `full_text text`, `generation_metadata jsonb`, `created_by_job_id`, `created_at`, `updated_at`.
+Columns: `id`, `project_id`, `story_version_id`, `creative_settings_id`, `version_number`, `status script_status`, `language`, `character_id uuid null references characters(id) on delete set null`, `narrator_config jsonb`, `full_text text`, `generation_metadata jsonb`, `created_by_job_id`, `created_at`, `updated_at`.
+
+`narrator_config` freezes the character's resolved voice + speech-style configuration at generation time (second freeze point, see `docs/CHANNEL_CHARACTER_MODEL.md`). Later character edits never change existing script versions.
 
 Constraints/indexes: unique `(project_id, version_number)`, index `(story_version_id)`, index `(project_id, created_at desc)`.
+
+### Required `generation_metadata` keys
+
+Every generated version row (`story_versions`, `script_versions`, `narration_assets`, `edit_versions`) must record in its `generation_metadata`/equivalent jsonb: `model_id`, `model_version` (when reported by the provider), `prompt_template_version`, `character_config_hash`, and the sampling parameters used. Model ids are pinned via configuration, never provider "latest" aliases. This is what makes per-channel consistency auditable and regressions diagnosable.
 
 ### `script_sections`
 

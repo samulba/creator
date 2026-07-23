@@ -18,8 +18,9 @@ Creator's information architecture should make a complex media-production pipeli
    - Processing state, creative review, final output.
 
 3. **Settings**
-   - Minimal user-level preferences.
-   - Default language, default narrator, and export preferences when supported.
+   - Channels: the user's YouTube channels with creative defaults and edit-style branding.
+   - Characters: reusable narrator identities (voice + speech style), shared across channels.
+   - Minimal user-level preferences (default language, export preferences when supported).
 
 ### Navigation not needed in MVP
 

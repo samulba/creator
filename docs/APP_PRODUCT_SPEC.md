@@ -41,6 +41,10 @@ The MVP should support one complete production path:
 7. Make limited targeted changes.
 8. Download the approved video.
 
+### Channels and Characters (in scope)
+
+Per-channel consistency is mission-critical and part of the core product, not a future add-on: the user configures **Channels** (their YouTube channels, with creative defaults and edit-style branding) and reusable **Characters** (narrator voice + speech style). Every video produced for a channel uses the channel's character and style so the channel output stays uniform. See `docs/CHANNEL_CHARACTER_MODEL.md`.
+
 ### Near-term product
 
 Near-term improvements may add:
@@ -57,8 +61,6 @@ Near-term improvements may add:
 
 Future functionality may include:
 
-- Channel-specific creative profiles.
-- Reusable narrator and tone presets.
 - Automatic title, description, and chapter drafts.
 - Thumbnail concept support.
 - Batch uploads.

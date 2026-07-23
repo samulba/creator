@@ -4,6 +4,17 @@
 
 Creator should automate aggressively while giving users high-leverage creative control. The product should not become a full Adobe Premiere clone. It should expose creative direction, story decisions, narration, moment inclusion, and version approval.
 
+## Channels and Characters
+
+Above the per-project dials sits the channel identity layer (see `docs/CHANNEL_CHARACTER_MODEL.md`):
+
+- A **Character** is a reusable narrator identity: voice (provider voice + pinned model + voice settings) and speech style (tone, humor, energy, sentence length, catchphrases, forbidden words, example lines).
+- A **Channel** is one of the user's YouTube channels: a default character, the five creative dials as defaults, and edit-style branding (caption/zoom/transition/intro/outro tokens).
+
+**Freeze semantics (do not change):** at project creation the channel's dials and edit style are copied by value into the project's settings snapshot, while the character stays referenced — so character fixes flow into all not-yet-generated videos. At generation time the character's resolved config is frozen into the version rows — so existing videos never change retroactively.
+
+Guardrail: structured, bounded personas are in scope ("Characters"); a freeform prompt library remains out of scope.
+
 ## Creative Director Abstraction
 
 Creator should present a compact **Creative Director** model: a small set of meaningful dimensions that shape the final video.
