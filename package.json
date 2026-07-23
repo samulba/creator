@@ -9,14 +9,17 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "format": "prettier --check .",
-    "format:write": "prettier --write ."
+    "format:write": "prettier --write .",
+    "db:types": "node scripts/generate-supabase-types.mjs > src/lib/supabase/database.types.ts"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "next": "16.2.11",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "@supabase/ssr": "0.12.3",
+    "@supabase/supabase-js": "2.110.7"
   },
   "devDependencies": {
     "@types/node": "latest",
