@@ -8,9 +8,17 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const next = getSafeAuthRedirect(requestUrl.searchParams.get("next"));
 
-  if (code) {
-    const supabase = await createClient();
-    await supabase.auth.exchangeCodeForSession(code);
+  if (!code) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if (error) {
+    // The confirmation link is invalid or expired; land on login instead of
+    // bouncing through the protected area.
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.redirect(new URL(next, request.url));

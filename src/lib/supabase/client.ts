@@ -6,10 +6,7 @@ import { getSupabaseConfig } from "./config";
 import type { Database } from "./database.types";
 
 export function createClient() {
-  const supabaseConfig = getSupabaseConfig();
+  const { url, publishableKey } = getSupabaseConfig();
 
-  return createBrowserClient<Database>(
-    supabaseConfig.url,
-    supabaseConfig.anonKey,
-  );
+  return createBrowserClient<Database>(url, publishableKey);
 }

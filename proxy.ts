@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getSupabaseConfig } from "./src/lib/supabase/config";
+import { getOptionalSupabaseConfig } from "./src/lib/supabase/config";
 
 function buildLoginUrl(request: NextRequest) {
   const loginUrl = new URL("/login", request.url);
@@ -19,17 +19,17 @@ function buildLoginUrl(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
 
-  let supabaseConfig: ReturnType<typeof getSupabaseConfig>;
+  const supabaseConfig = getOptionalSupabaseConfig();
 
-  try {
-    supabaseConfig = getSupabaseConfig();
-  } catch {
+  if (!supabaseConfig) {
+    // Without Supabase configuration there is no session to refresh and no
+    // reliable auth state; pages render their own configuration notice.
     return response;
   }
 
   const supabase = createServerClient(
     supabaseConfig.url,
-    supabaseConfig.anonKey,
+    supabaseConfig.publishableKey,
     {
       cookies: {
         getAll() {

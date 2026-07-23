@@ -1,14 +1,58 @@
-# Supabase workflow
+# Supabase — Manual Migration Workflow
 
-Creator keeps Supabase schema changes in version-controlled migrations under `supabase/migrations`.
+Creator manages the Supabase schema with plain SQL files that are applied **manually** through the Supabase SQL Editor. There is no automated remote migration tooling in this repository, and no database credentials are stored here.
 
-Recommended workflow:
+## Folder model
 
-1. Create or edit a timestamped SQL migration locally.
-2. Review the SQL in Git, including RLS policies and security-definer functions.
-3. If the Supabase CLI is available, run migrations against a local Supabase database with `supabase db reset`.
-4. Regenerate database types with `npm run db:types` after applying migrations locally or set `SUPABASE_PROJECT_ID` to generate from a reviewed remote project.
-5. Run `npm run lint`, `npm run typecheck`, and `npm run build` before opening a PR.
-6. Apply reviewed migrations to staging/production through the controlled Supabase deployment workflow. Do not edit production tables manually in the dashboard.
+```text
+supabase/
+  migrations/   ← PENDING: not yet executed against the Supabase project
+  applied/      ← DONE: manually executed successfully in the SQL Editor
+  README.md
+```
 
-This repository intentionally does not contain Supabase service-role credentials.
+- `supabase/migrations/` contains migrations that have **not** been applied yet.
+- `supabase/applied/` contains migrations that **have** been executed successfully.
+- A migration lives in exactly one of the two folders. Moving the file **is** the bookkeeping.
+
+## Workflow
+
+1. A new migration is created as a numbered SQL file in `supabase/migrations/`.
+2. You open the Supabase Dashboard → SQL Editor for the target project.
+3. You copy the full contents of the migration file and execute it.
+4. **Only after it executed successfully**, move the file to `supabase/applied/` (keep the same filename) and commit the move.
+5. If execution failed, fix the migration in `supabase/migrations/` and re-run. Nothing is moved until it succeeds.
+
+## Naming convention
+
+Sequential, zero-padded, snake_case:
+
+```text
+001_supabase_foundation.sql
+002_<short_description>.sql
+003_<short_description>.sql
+```
+
+Numbers define execution order. Never reuse a number. Apply migrations strictly in order.
+
+## Rules
+
+- **Never** move a migration to `applied/` before it executed successfully.
+- **Never** edit a migration in `applied/` to change the production schema. Applied files are a historical record.
+- Schema changes after a migration is applied require a **new** migration file with the next number.
+- Editing a still-pending migration in `migrations/` is fine — it has not touched any database yet.
+- Migrations should be forward-only. Prefer explicit repair migrations over rollbacks.
+- Never commit Supabase credentials (database password, service-role key, secret keys) to this repository.
+
+## Current state
+
+| Migration                                | Status                                                               |
+| ---------------------------------------- | -------------------------------------------------------------------- |
+| `migrations/001_supabase_foundation.sql` | **Pending** — has not been executed against the Supabase project yet |
+
+`001_supabase_foundation.sql` creates the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enables RLS with owner-scoped policies on all three tables.
+
+## After applying a migration
+
+- Update `src/lib/supabase/database.types.ts` so TypeScript types match the schema. `npm run db:types` can generate them via the Supabase CLI (`SUPABASE_PROJECT_ID=<ref> npm run db:types`), or the file can be maintained by hand while the schema is small.
+- Run `npm run lint`, `npm run typecheck`, and `npm run build`.

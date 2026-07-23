@@ -1,46 +1,51 @@
-# Creator — Application Design System
+# Creator — Design System
 
 ## Visual Direction
 
-Creator should use a near-black, neutral dark-first interface with a subtle Framepath blue accent. The style should be clean, precise, restrained, and professional.
+Creator uses one dark-first visual system across the landing page, auth, and the application: warm near-black neutrals with a single restrained brass accent. The direction is related to Framepath's clean, dark product language but carries Creator's own color identity.
 
-Avoid neon gaming aesthetics, excessive glassmorphism, loud gradients, heavy shadows, AI cliché visuals, or generic SaaS dashboard density.
+The style is clean, precise, restrained, and professional. Avoid neon gaming aesthetics, excessive glassmorphism, loud gradients, heavy shadows, AI cliché visuals, or generic SaaS dashboard density.
+
+## Implementation
+
+- Tokens are defined once in `app/globals.css` (Tailwind v4 `@theme`) and are the only allowed color source. No per-page hardcoded palettes.
+- Shared primitives live in `components/ui/`: `Button`, `Input`/`Field`/`FormMessage`, `StatusBadge`, `StageList`, `EmptyState`, `Wordmark`.
 
 ## Color
 
-### Backgrounds
+### Surfaces (tokens)
 
-- App background: near-black neutral.
-- Primary surface: slightly elevated dark neutral.
-- Secondary surface: subtle contrast from background.
-- Input surface: dark neutral with clear border.
+- `canvas` — page background (warm near-black).
+- `surface` — raised panels.
+- `raised` — subtle secondary surface, selected rows.
+- `overlay` — dialogs and menus.
+- `edge` / `edge-strong` — hairline and emphasized borders.
 
-### Text
+### Text (tokens)
 
-- Primary text: high-contrast off-white.
-- Secondary text: muted neutral.
-- Tertiary text: low-emphasis neutral.
-- Disabled text: visibly muted but readable.
+- `ink` — primary text (warm off-white).
+- `ink-secondary` — secondary text.
+- `ink-muted` — metadata and disabled text.
 
 ### Accent
 
-Use Framepath blue sparingly for:
+One accent: Creator brass (`accent`, `accent-hover`, `accent-ink` for text on accent). Use sparingly for:
 
-- Primary actions.
+- The one primary action per screen.
 - Focus rings.
-- Active navigation state.
-- Progress highlights.
-- Selected version or selected chapter.
+- Active navigation and selected state markers.
 
-### Status colors
+Do not use the accent for status, decoration, or large fills.
 
-- Processing: blue.
-- Success/ready: green used sparingly.
-- Warning: amber.
-- Failure: red.
-- Cancelled/archived: muted neutral.
+### Status colors (tokens)
 
-Status colors should not dominate the screen.
+- `info` (quiet blue): processing and rendering.
+- `ok` (calm green): ready/success, used sparingly.
+- `warn` (amber): attention.
+- `danger` (muted red): failure and destructive actions.
+- Cancelled/archived: neutral ink tones.
+
+Status reads as a small dot plus label (`StatusBadge`), not as loud pills. Status colors should not dominate the screen.
 
 ## Typography
 
@@ -79,7 +84,7 @@ Avoid card nesting. Prefer flat, structured panels.
 ## Borders and Radii
 
 - Borders should be subtle and functional.
-- Radii should be restrained.
+- Radii are restrained: 2px (`xs`), 4px (`sm`, controls), 6px (`md`, dialogs). Panels and workspace regions are square-edged and separated by hairlines.
 - Avoid pill-shaped everything.
 - Use sharper professional forms for workspace panels.
 

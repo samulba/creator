@@ -110,14 +110,15 @@ Do not expose queue internals to normal users. The UI reads project semantic sta
 
 ## Migration Workflow
 
-1. Create or update SQL migration locally.
-2. Run local Supabase reset/migration apply.
-3. Regenerate database TypeScript types.
-4. Run lint/typecheck/tests/build.
-5. Review RLS policies with positive and negative tests.
-6. Apply through controlled deployment, never by manual production editing.
+Creator uses a manual migration workflow, documented in `supabase/README.md`:
 
-Migration naming: `YYYYMMDDHHMMSS_descriptive_name.sql`.
+1. New migrations are created as numbered SQL files in `supabase/migrations/` (pending).
+2. The SQL is reviewed in Git, including RLS policies and security-definer functions.
+3. The migration is executed manually in the Supabase SQL Editor.
+4. Only after successful execution, the file is moved to `supabase/applied/`.
+5. Database TypeScript types are updated, then lint/typecheck/build run.
+
+Migration naming: sequential `NNN_descriptive_name.sql` (e.g. `001_supabase_foundation.sql`). Applied migrations are never edited; schema changes require a new migration.
 
 ## Backups and Recovery
 

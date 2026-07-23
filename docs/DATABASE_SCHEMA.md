@@ -324,9 +324,9 @@ Columns: `id`, `project_id`, `output_version_id`, `render_attempt_id uuid null`,
 
 ## Migration Strategy
 
-- Store migrations under `supabase/migrations` once Supabase is introduced.
-- Name migrations as `YYYYMMDDHHMMSS_descriptive_name.sql`.
-- Every schema change must be committed and reviewed; no manual production drift.
+- Pending migrations live under `supabase/migrations/`; successfully executed migrations are moved to `supabase/applied/`. See `supabase/README.md` for the manual workflow.
+- Name migrations sequentially as `NNN_descriptive_name.sql`.
+- Every schema change must be committed and reviewed; no manual production drift beyond executing the reviewed migration files.
 - Migrations should be forward-only for production. Use explicit repair migrations rather than editing applied migrations.
 - Include table comments and column comments for JSONB and security-sensitive fields.
 - Create RLS policies in the same migration as each table or immediately after table creation.

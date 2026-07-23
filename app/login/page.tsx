@@ -1,24 +1,23 @@
 import { redirect } from "next/navigation";
 
-import { AuthPage } from "@/components/auth/auth-page";
-import { createClient } from "@/src/lib/supabase/server";
+import { AuthScreen } from "@/components/auth/auth-screen";
+import { getServerAuthState } from "@/src/lib/auth/session";
+
+// Auth state must be evaluated per request, even when Supabase env is
+// absent at build time.
+export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
-  let isAuthenticated = false;
+  const auth = await getServerAuthState();
 
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    isAuthenticated = Boolean(user);
-  } catch {
-    // The client form shows a configuration-specific error if Supabase env is missing.
-  }
-
-  if (isAuthenticated) {
+  if (auth.status === "authenticated") {
     redirect("/app");
   }
 
-  return <AuthPage mode="login" />;
+  return (
+    <AuthScreen
+      mode="login"
+      supabaseConfigured={auth.status !== "unconfigured"}
+    />
+  );
 }

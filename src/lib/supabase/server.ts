@@ -9,26 +9,23 @@ import type { Database } from "./database.types";
 export async function createClient() {
   const cookieStore = await cookies();
 
-  const supabaseConfig = getSupabaseConfig();
+  const { url, publishableKey } = getSupabaseConfig();
 
-  return createServerClient<Database>(
-    supabaseConfig.url,
-    supabaseConfig.anonKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
-          } catch {
-            // Server Components cannot set cookies. Middleware or Route Handlers refresh sessions.
-          }
-        },
+  return createServerClient<Database>(url, publishableKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch {
+          // Server Components cannot set cookies. The proxy and Route
+          // Handlers are responsible for refreshing sessions.
+        }
       },
     },
-  );
+  });
 }

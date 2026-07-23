@@ -4,7 +4,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Creator — Video Production for Gaming Creators",
-  description: "Creator turns raw gameplay recordings into polished, story-driven long-form YouTube videos.",
+  description:
+    "Creator turns raw gameplay recordings into polished, story-driven long-form YouTube videos.",
 };
 
 export default function RootLayout({

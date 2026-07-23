@@ -9,15 +9,24 @@ export function getFriendlyAuthError(message: string | undefined) {
     return "Confirm your email before logging in.";
   }
 
-  if (normalizedMessage.includes("already registered") || normalizedMessage.includes("already exists")) {
+  if (
+    normalizedMessage.includes("already registered") ||
+    normalizedMessage.includes("already exists")
+  ) {
     return "An account already exists for that email. Log in instead.";
   }
 
-  if (normalizedMessage.includes("password") && normalizedMessage.includes("weak")) {
+  if (
+    normalizedMessage.includes("password") &&
+    normalizedMessage.includes("weak")
+  ) {
     return "Choose a stronger password.";
   }
 
-  if (normalizedMessage.includes("password") && normalizedMessage.includes("6")) {
+  if (
+    normalizedMessage.includes("password") &&
+    normalizedMessage.includes("6")
+  ) {
     return "Use a password with at least 6 characters.";
   }
 
@@ -25,7 +34,10 @@ export function getFriendlyAuthError(message: string | undefined) {
     return "Enter a valid email address.";
   }
 
-  if (normalizedMessage.includes("fetch") || normalizedMessage.includes("network")) {
+  if (
+    normalizedMessage.includes("fetch") ||
+    normalizedMessage.includes("network")
+  ) {
     return "Creator could not reach authentication. Check your connection and try again.";
   }
 
