@@ -56,7 +56,7 @@ export const env = {
    */
   gemini: {
     apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash",
     /** Max wall-clock to wait for an uploaded file to become ACTIVE. */
     fileActiveTimeoutMs: optionalInt("GEMINI_FILE_TIMEOUT_MS", 5 * 60_000),
     /** Max wall-clock for a single generateContent call. */

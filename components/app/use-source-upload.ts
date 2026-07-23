@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   abortSourceUpload,
   completeSourceUpload,
+  getSourceUploadStatus,
   getUploadPartUrls,
   startSourceUpload,
 } from "@/src/lib/actions/uploads";
@@ -88,6 +89,33 @@ function putPart(
     xhr.open("PUT", url);
     xhr.send(body);
   });
+}
+
+/**
+ * After a failed finalize request, polls the asset status until the server
+ * settles it. Returns true when the upload turned out to be complete
+ * ("available"), false when it is settled as not completed, and
+ * "cancelled" when the user cancelled while waiting.
+ */
+async function waitForServerFinalize(
+  assetId: string,
+  active: ActiveUpload,
+): Promise<boolean | "cancelled"> {
+  const POLL_INTERVAL_MS = 5000;
+  const POLL_ATTEMPTS = 24; // ~2 minutes
+
+  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    if (active.cancelled) return "cancelled";
+
+    const status = await getSourceUploadStatus(assetId).catch(() => null);
+    if (!status?.ok || !status.data) continue;
+
+    if (status.data.status === "available") return true;
+    if (status.data.status !== "uploading") return false;
+  }
+
+  return false;
 }
 
 /**
@@ -290,17 +318,33 @@ export function useSourceUpload({
 
         setState((current) => ({ ...current, phase: "finalizing" }));
 
+        // Finalizing (R2 multipart complete + verification + pipeline start)
+        // can outlive a proxy timeout even though the server finishes the
+        // work. Never trust a failed finalize response alone: poll the
+        // asset status and only fail once the server confirms the upload
+        // did not complete.
         const completed = await completeSourceUpload({
           assetId: started.data.assetId,
           parts: etags.map((etag, index) => ({
             partNumber: index + 1,
             etag,
           })),
-        });
+        }).catch(() => null);
 
-        if (!completed.ok) {
-          await fail(completed.error);
-          return;
+        if (!completed?.ok) {
+          const recovered = await waitForServerFinalize(
+            started.data.assetId,
+            active,
+          );
+          if (recovered === "cancelled") return;
+          if (!recovered) {
+            await fail(
+              completed && !completed.ok
+                ? completed.error
+                : "The upload could not be confirmed. Check the project after a refresh before retrying.",
+            );
+            return;
+          }
         }
 
         setState((current) => ({ ...current, phase: "done" }));

@@ -319,6 +319,25 @@ export async function completeSourceUpload(input: {
   return { ok: true };
 }
 
+/**
+ * Reports the current status of a source upload. Used by the client to
+ * recover when the finalize request itself fails (proxy timeout, dropped
+ * connection) even though the server completed the upload — the asset is
+ * "available" in that case and the client can treat the upload as done.
+ */
+export async function getSourceUploadStatus(
+  assetId: string,
+): Promise<ActionResult<{ status: string }>> {
+  const context = await requireActionContext();
+  if (!context.ok) return context;
+  if (!isUuid(assetId)) return failure("Invalid asset id.");
+
+  const asset = await loadUploadingAsset(context, assetId);
+  if (!asset) return failure("Upload not found.");
+
+  return { ok: true, data: { status: asset.status } };
+}
+
 export async function abortSourceUpload(
   assetId: string,
 ): Promise<ActionResult> {

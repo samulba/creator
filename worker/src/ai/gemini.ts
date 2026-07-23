@@ -120,7 +120,11 @@ export function createGeminiProvider(config: GeminiConfig): GenerativeProvider {
       signal: AbortSignal.timeout(config.requestTimeoutMs),
     });
     if (!start.ok) {
-      throw providerErrorFromResponse("FILE_UPLOAD_START_FAILED", start.status);
+      throw await providerErrorFromResponse(
+        "FILE_UPLOAD_START_FAILED",
+        "file upload start",
+        start,
+      );
     }
     const uploadUrl = start.headers.get("x-goog-upload-url");
     if (!uploadUrl) {
@@ -142,7 +146,11 @@ export function createGeminiProvider(config: GeminiConfig): GenerativeProvider {
       signal: AbortSignal.timeout(config.requestTimeoutMs),
     });
     if (!finalize.ok) {
-      throw providerErrorFromResponse("FILE_UPLOAD_FAILED", finalize.status);
+      throw await providerErrorFromResponse(
+        "FILE_UPLOAD_FAILED",
+        "file upload",
+        finalize,
+      );
     }
     const payload = (await finalize.json()) as { file?: GeminiFile };
     const file = payload.file;
@@ -185,7 +193,11 @@ export function createGeminiProvider(config: GeminiConfig): GenerativeProvider {
         { signal: AbortSignal.timeout(config.requestTimeoutMs) },
       );
       if (!check.ok) {
-        throw providerErrorFromResponse("FILE_STATUS_FAILED", check.status);
+        throw await providerErrorFromResponse(
+          "FILE_STATUS_FAILED",
+          "file status check",
+          check,
+        );
       }
       current = (await check.json()) as GeminiFile;
     }
@@ -233,7 +245,11 @@ export function createGeminiProvider(config: GeminiConfig): GenerativeProvider {
       },
     );
     if (!response.ok) {
-      throw providerErrorFromResponse("GENERATE_FAILED", response.status);
+      throw await providerErrorFromResponse(
+        "GENERATE_FAILED",
+        "generateContent",
+        response,
+      );
     }
 
     const payload = (await response.json()) as GenerateContentResponse;
@@ -356,11 +372,35 @@ export function createGeminiProvider(config: GeminiConfig): GenerativeProvider {
   } satisfies GenerativeProvider;
 }
 
-function providerErrorFromResponse(code: string, status: number): ProviderError {
+async function providerErrorFromResponse(
+  code: string,
+  step: string,
+  response: Response,
+): Promise<ProviderError> {
+  const status = response.status;
   // 429/5xx are transient; 4xx (bad key, quota exhausted config) are not.
   const retryable = status === 429 || status >= 500;
-  return new ProviderError(code, `Gemini request failed (${status}).`, {
-    retryable,
-    details: { status },
-  });
+
+  // Google returns a JSON error envelope; surface its message so a failure
+  // is diagnosable from the stored failure_message alone.
+  let detail: string | null = null;
+  try {
+    const body = (await response.json()) as {
+      error?: { message?: string };
+    };
+    detail = body.error?.message?.slice(0, 300) ?? null;
+  } catch {
+    // Non-JSON error body — keep the status-only message.
+  }
+
+  const hint =
+    status === 404 && step === "generateContent"
+      ? " The configured Gemini model is likely retired or misspelled — set GEMINI_MODEL to a current model."
+      : "";
+
+  return new ProviderError(
+    code,
+    `Gemini ${step} failed (${status})${detail ? `: ${detail}` : ""}.${hint}`,
+    { retryable, details: { status, step, detail } },
+  );
 }

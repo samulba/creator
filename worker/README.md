@@ -133,7 +133,7 @@ All server-side secrets. **Never** expose these in the web app or a browser.
 | `R2_SECRET_ACCESS_KEY` | yes | R2 API token secret |
 | `R2_BUCKET` | yes | e.g. `creator-media` |
 | `GEMINI_API_KEY` | no | Google AI Studio key. **Secret.** Enables `coarse_analysis` / `story_generation` / `script_generation`; absent → those jobs stay queued. |
-| `GEMINI_MODEL` | no | Video- and text-capable Gemini model (default `gemini-2.5-flash`) |
+| `GEMINI_MODEL` | no | Video- and text-capable Gemini model (default `gemini-3.5-flash`) |
 | `ELEVENLABS_API_KEY` | no | ElevenLabs key. **Secret.** Enables `voice_generation`; absent → those jobs stay queued. |
 | `ELEVENLABS_MODEL` | no | Pinned fallback model id, never "latest" (default `eleven_multilingual_v2`) |
 | `ELEVENLABS_OUTPUT_FORMAT` | no | Audio output format (default `mp3_44100_128`) |
