@@ -144,11 +144,11 @@ export function NewVideoDialog({
             <div className="space-y-5 px-6 py-6">
               <div className="flex flex-col items-center justify-center border border-dashed border-edge-strong px-6 py-8 text-center">
                 <p className="text-sm font-medium text-ink">
-                  Gameplay upload arrives in Phase 2
+                  Upload the gameplay on the next screen
                 </p>
                 <p className="mt-1.5 text-xs text-ink-muted">
-                  The project is created now and keeps its setup until uploads
-                  are connected.
+                  Create the project first, then drop the recording into the
+                  project to start processing.
                 </p>
               </div>
 
