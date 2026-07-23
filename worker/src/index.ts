@@ -76,11 +76,27 @@ async function runJob(job: ProcessingJob): Promise<void> {
         retryable: error.retryable,
       });
     } else {
-      const message = error instanceof Error ? error.message : "unknown error";
+      // Surface enough of the underlying error to diagnose (e.g. an AWS SDK
+      // "UnknownError" from R2 usually carries an HTTP status like 403).
+      const err = error as {
+        name?: string;
+        message?: string;
+        $metadata?: { httpStatusCode?: number };
+        Code?: string;
+      };
+      const message = err?.message ?? "unknown error";
+      const errorName = err?.name ?? null;
+      const httpStatus = err?.$metadata?.httpStatusCode ?? null;
+      const providerCode = err?.Code ?? null;
       await failJob(job.id, workerId, {
         code: "WORKER_ERROR",
         message: "A processing step did not complete.",
-        details: { reason: message },
+        details: {
+          reason: message,
+          name: errorName,
+          http_status: httpStatus,
+          provider_code: providerCode,
+        },
         retryable: true,
         failProject: true,
       });
@@ -88,6 +104,9 @@ async function runJob(job: ProcessingJob): Promise<void> {
         job_id: job.id,
         job_type: job.job_type,
         reason: message,
+        error_name: errorName,
+        http_status: httpStatus,
+        provider_code: providerCode,
       });
     }
   }
