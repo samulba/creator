@@ -1,52 +1,15 @@
 import Link from "next/link";
 
+import { Reveal, ScrollProgress } from "@/components/landing/reveal";
+import { ScrollStory } from "@/components/landing/scroll-story";
 import { buttonClassName } from "@/components/ui/button";
 import { Wordmark } from "@/components/ui/wordmark";
-
-const storyStages = [
-  {
-    label: "Raw gameplay",
-    title: "The full match stays intact.",
-    copy: "Creator starts with the recording you already have: quiet stretches, chases, mistakes, rescues, and the messy context that makes the payoff land.",
-    detail: "Source 01:12:44 · uncut gameplay",
-  },
-  {
-    label: "Understand",
-    title: "The footage becomes structured context.",
-    copy: "Match events, momentum shifts, player decisions, and candidate moments are organized before any story or edit is created.",
-    detail: "37 events · 12 candidate moments",
-  },
-  {
-    label: "Story",
-    title: "A video angle emerges from the match.",
-    copy: "Creator builds the hook, setup, escalation, turning point, climax, and payoff around what actually happened in the gameplay.",
-    detail: "Angle: pressure into reversal",
-  },
-  {
-    label: "Narrate",
-    title: "Narration supports the edit.",
-    copy: "Voiceover is written against the timeline so it adds context, tension, and rhythm instead of repeating what viewers can already see.",
-    detail: "6 timestamped script sections",
-  },
-  {
-    label: "Edit",
-    title: "Pacing turns raw footage into a watchable video.",
-    copy: "Dead time is removed, key moments are preserved, audio is balanced, and the final timeline is assembled for long-form YouTube viewing.",
-    detail: "Timeline 12:48 · balanced density",
-  },
-  {
-    label: "Final video",
-    title: "A finished production is ready to review.",
-    copy: "The result is a coherent long-form video with chapters, narration, edit decisions, and a render that can be inspected before approval.",
-    detail: "Ready for review · version 01",
-  },
-] as const;
 
 const proofPoints = [
   ["Context", "Understands why a moment matters before it cuts."],
   ["Story", "Shapes a hook, escalation, turning point, and payoff."],
-  ["Pacing", "Keeps long-form rhythm instead of chasing isolated highlights."],
-  ["Payoff", "Preserves the setup that makes the final moment worth watching."],
+  ["Pacing", "Keeps long-form rhythm instead of chasing highlights."],
+  ["Payoff", "Preserves the setup that makes the ending worth watching."],
 ] as const;
 
 /**
@@ -63,9 +26,9 @@ function ProductFrame() {
   return (
     <div
       aria-hidden="true"
-      className="mx-auto w-full max-w-6xl border border-edge-strong bg-surface p-1.5 shadow-[0_40px_120px_rgba(0,0,0,0.55)]"
+      className="mx-auto w-full max-w-5xl border border-edge-strong bg-surface p-1.5 shadow-[0_40px_120px_rgba(0,0,0,0.55)]"
     >
-      <div className="grid min-h-[480px] border border-edge bg-canvas lg:grid-cols-[200px_260px_minmax(0,1fr)]">
+      <div className="grid min-h-[440px] border border-edge bg-canvas lg:grid-cols-[200px_260px_minmax(0,1fr)]">
         <aside className="hidden flex-col border-r border-edge lg:flex">
           <div className="border-b border-edge px-4 py-4">
             <Wordmark size="sm" />
@@ -157,75 +120,13 @@ function ProductFrame() {
   );
 }
 
-function ScrollStory() {
-  return (
-    <section
-      id="workflow"
-      className="border-y border-edge bg-surface px-5 py-24 sm:px-8 lg:py-32"
-    >
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr]">
-          <div className="lg:sticky lg:top-28 lg:h-fit">
-            <p className="text-xs font-semibold tracking-[0.3em] text-accent uppercase">
-              The workflow
-            </p>
-            <h2 className="mt-6 text-5xl font-semibold tracking-[-0.05em] text-ink sm:text-6xl">
-              A production sequence, not a clipping trick.
-            </h2>
-            <p className="mt-7 max-w-md text-lg leading-8 text-ink-secondary">
-              Follow the work from raw gameplay to finished video. Each stage
-              earns the next one.
-            </p>
-          </div>
-          <div className="space-y-6">
-            {storyStages.map((stage, index) => (
-              <article
-                className="sticky min-h-[380px] border border-edge bg-canvas p-6 lg:p-9"
-                key={stage.label}
-                style={{ top: `${96 + index * 10}px` }}
-              >
-                <div className="flex items-start justify-between gap-6 border-b border-edge pb-5">
-                  <span className="tabular font-mono text-xs text-ink-muted">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span className="text-right text-xs font-semibold tracking-[0.24em] text-accent uppercase">
-                    {stage.label}
-                  </span>
-                </div>
-                <div className="mt-10 grid gap-10 md:grid-cols-[0.9fr_1.1fr] md:items-end">
-                  <div>
-                    <h3 className="text-3xl font-semibold tracking-[-0.04em] text-ink sm:text-4xl">
-                      {stage.title}
-                    </h3>
-                    <p className="mt-5 leading-7 text-ink-secondary">
-                      {stage.copy}
-                    </p>
-                  </div>
-                  <div className="border border-edge bg-surface p-5">
-                    <div className="h-32 border border-edge bg-canvas p-4">
-                      <div className="h-full border-l-2 border-accent/60 pl-4 text-sm leading-6 text-ink-secondary">
-                        {stage.detail}
-                      </div>
-                    </div>
-                    <div className="mt-4 h-px bg-gradient-to-r from-accent via-edge-strong to-transparent" />
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export default function Home() {
   return (
-    <main className="min-h-screen overflow-hidden">
+    <main className="min-h-screen">
       <header className="sticky top-0 z-50 border-b border-edge bg-canvas/90 backdrop-blur-xl">
         <nav
           aria-label="Main navigation"
-          className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8"
+          className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8"
         >
           <Link href="/" className="inline-flex">
             <Wordmark />
@@ -237,9 +138,6 @@ export default function Home() {
             <a className="transition-colors hover:text-ink" href="#difference">
               Difference
             </a>
-            <a className="transition-colors hover:text-ink" href="#product">
-              Product
-            </a>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/login" className={buttonClassName("ghost", "sm")}>
@@ -250,103 +148,96 @@ export default function Home() {
             </Link>
           </div>
         </nav>
+        <ScrollProgress />
       </header>
 
-      <section className="relative px-5 pt-20 pb-20 sm:px-8 lg:pt-28 lg:pb-28">
-        <div className="mx-auto max-w-7xl">
-          <div className="max-w-5xl">
+      <section className="px-5 pt-24 pb-24 sm:px-8 lg:pt-36">
+        <div className="mx-auto max-w-6xl">
+          <Reveal className="mx-auto max-w-3xl text-center">
             <p className="text-xs font-semibold tracking-[0.3em] text-accent uppercase">
-              Long-form YouTube production for Dead by Daylight creators
+              Long-form YouTube production for Dead by Daylight
             </p>
-            <h1 className="mt-8 text-6xl font-semibold tracking-[-0.05em] text-ink sm:text-7xl lg:text-8xl">
-              Your gameplay already has the content. Creator turns it into the
-              video.
+            <h1 className="mt-7 text-5xl font-semibold tracking-[-0.045em] text-ink sm:text-6xl lg:text-7xl">
+              Your gameplay already has the content.
             </h1>
-          </div>
-          <div className="mt-10 grid gap-8 lg:grid-cols-[0.55fr_0.45fr] lg:items-end">
-            <p className="max-w-2xl text-xl leading-9 text-ink-secondary">
-              Creator understands the match, finds the story, writes
-              timeline-aware narration, builds the edit, and renders a polished
-              long-form video without turning your footage into disposable
-              clips.
+            <p className="mx-auto mt-7 max-w-xl text-lg leading-8 text-ink-secondary">
+              Creator understands the match, finds the story, writes the
+              narration, and builds the edit — a finished long-form video, not
+              disposable clips.
             </p>
-            <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
+            <div className="mt-9 flex justify-center gap-3">
               <Link href="/app" className={buttonClassName("primary")}>
                 Open Creator
               </Link>
               <a href="#workflow" className={buttonClassName("secondary")}>
-                Follow the sequence
+                See how it works
               </a>
             </div>
-          </div>
-          <div id="product" className="mt-16">
+          </Reveal>
+          <Reveal className="mt-20" delay={150}>
             <ProductFrame />
-          </div>
+          </Reveal>
         </div>
       </section>
 
-      <section className="px-5 py-16 sm:px-8">
-        <div className="mx-auto grid max-w-7xl gap-12 border-y border-edge py-20 lg:grid-cols-[0.7fr_1.3fr] lg:items-center">
-          <h2 className="text-4xl font-semibold tracking-[-0.045em] text-ink sm:text-6xl">
+      <section className="px-5 pb-28 sm:px-8">
+        <Reveal className="mx-auto max-w-3xl border-t border-edge pt-20 text-center">
+          <h2 className="text-3xl font-semibold tracking-[-0.04em] text-ink sm:text-4xl">
             Recording is the easy part.
           </h2>
-          <p className="max-w-3xl text-2xl leading-10 text-ink-secondary">
-            The hard part is understanding what happened, what should be kept,
-            where the story turns, when narration should enter, and how the
-            final video earns its payoff.
+          <p className="mt-6 text-lg leading-8 text-ink-secondary">
+            The hard part is knowing what to keep, where the story turns, and
+            how the final video earns its payoff.
           </p>
-        </div>
+        </Reveal>
       </section>
 
       <ScrollStory />
 
       <section id="difference" className="px-5 py-28 sm:px-8 lg:py-36">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-12 lg:grid-cols-[1fr_1fr] lg:items-end">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.3em] text-accent uppercase">
-                Not an AI clip generator
-              </p>
-              <h2 className="mt-6 text-5xl font-semibold tracking-[-0.05em] text-ink sm:text-7xl">
-                Built for the shape of a real video.
-              </h2>
-            </div>
-            <p className="text-xl leading-9 text-ink-secondary">
-              Short-form tools optimize for extraction. Creator is designed
-              around the full arc: the setup viewers need, the pacing that keeps
-              them watching, and the payoff that makes the video feel authored.
+        <div className="mx-auto max-w-6xl">
+          <Reveal className="max-w-2xl">
+            <p className="text-xs font-semibold tracking-[0.3em] text-accent uppercase">
+              Not an AI clip generator
             </p>
-          </div>
-          <div className="mt-16 grid gap-px border border-edge bg-edge lg:grid-cols-4">
-            {proofPoints.map(([title, copy]) => (
-              <article className="min-h-64 bg-canvas p-7" key={title}>
-                <h3 className="text-3xl font-semibold tracking-[-0.045em] text-ink">
-                  {title}
-                </h3>
-                <p className="mt-16 leading-7 text-ink-secondary">{copy}</p>
-              </article>
+            <h2 className="mt-5 text-3xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
+              Built for the shape of a real video.
+            </h2>
+          </Reveal>
+          <div className="mt-14 grid gap-px border border-edge bg-edge sm:grid-cols-2 lg:grid-cols-4">
+            {proofPoints.map(([title, copy], index) => (
+              <Reveal key={title} delay={index * 90} className="bg-canvas">
+                <article className="h-full p-7">
+                  <h3 className="text-xl font-semibold tracking-[-0.02em] text-ink">
+                    {title}
+                  </h3>
+                  <p className="mt-4 text-sm leading-6 text-ink-secondary">
+                    {copy}
+                  </p>
+                </article>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-t border-edge px-5 py-24 text-center sm:px-8 lg:py-32">
-        <p className="mx-auto max-w-4xl text-5xl font-semibold tracking-[-0.05em] text-ink sm:text-7xl">
-          Play the match. Keep the story. Ship the video.
-        </p>
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-ink-secondary">
-          Open the Creator workspace and review the production interface behind
-          this page.
-        </p>
-        <div className="mt-10">
-          <Link href="/app" className={buttonClassName("primary")}>
-            Open Creator
-          </Link>
-        </div>
+      <section className="border-t border-edge px-5 py-28 text-center sm:px-8 lg:py-36">
+        <Reveal>
+          <p className="mx-auto max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-ink sm:text-6xl">
+            Play the match.
+            <br />
+            Ship the video.
+          </p>
+          <div className="mt-10">
+            <Link href="/app" className={buttonClassName("primary")}>
+              Open Creator
+            </Link>
+          </div>
+        </Reveal>
       </section>
 
       <footer className="border-t border-edge px-5 py-10 sm:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 text-sm text-ink-muted md:flex-row md:items-center md:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 text-sm text-ink-muted md:flex-row md:items-center md:justify-between">
           <div>
             <Wordmark size="sm" />
             <p className="mt-3">
