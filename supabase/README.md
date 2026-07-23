@@ -46,15 +46,15 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 
 ## Current state
 
-| Migration                                    | Status                                                         |
-| -------------------------------------------- | -------------------------------------------------------------- |
-| `applied/001_supabase_foundation.sql`        | **Applied** — executed successfully in the Supabase SQL Editor |
-| `applied/002_channels_and_characters.sql`    | **Applied** — executed successfully in the Supabase SQL Editor |
-| `applied/003_assets.sql`                     | **Applied** — executed successfully in the Supabase SQL Editor |
-| `applied/004_processing_jobs.sql`            | **Applied** — executed successfully in the Supabase SQL Editor |
-| `applied/005_grant_authenticated_access.sql` | **Applied** — executed successfully in the Supabase SQL Editor |
-| `migrations/006_grant_service_role_access.sql` | **Pending** — needed before the video worker can run |
-| `migrations/007_analysis_foundation.sql` | **Pending** — Phase 5 analysis data model |
+| Migration                                      | Status                                                         |
+| ---------------------------------------------- | -------------------------------------------------------------- |
+| `applied/001_supabase_foundation.sql`          | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/002_channels_and_characters.sql`      | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/003_assets.sql`                       | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/004_processing_jobs.sql`              | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/005_grant_authenticated_access.sql`   | **Applied** — executed successfully in the Supabase SQL Editor |
+| `migrations/006_grant_service_role_access.sql` | **Pending** — needed before the video worker can run           |
+| `migrations/007_analysis_foundation.sql`       | **Pending** — Phase 5 analysis data model                      |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
