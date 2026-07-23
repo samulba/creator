@@ -9,6 +9,7 @@ import {
   abortMultipartUpload,
   completeMultipartUpload,
   createMultipartUpload,
+  deleteObject,
   headObject,
   presignGetObject,
   presignUploadPart,
@@ -259,10 +260,20 @@ export async function completeSourceUpload(input: {
 
   try {
     await completeMultipartUpload(asset.object_key, uploadId, input.parts);
-  } catch {
-    return failure(
-      "The upload could not be finalized in storage. Retry or cancel the upload.",
-    );
+  } catch (error) {
+    // "NoSuchUpload" usually means a previous finalize already completed the
+    // multipart upload but died before recording it (the upload id is
+    // consumed on completion). Fall through to verification: if the object
+    // exists and matches, this retry can still finish the bookkeeping.
+    const name =
+      error && typeof error === "object" && "name" in error
+        ? String((error as { name?: unknown }).name)
+        : null;
+    if (name !== "NoSuchUpload") {
+      return failure(
+        "The upload could not be finalized in storage. Retry or cancel the upload.",
+      );
+    }
   }
 
   // Verify the object server-side before trusting it.
@@ -276,6 +287,9 @@ export async function completeSourceUpload(input: {
       .from("assets")
       .update({ status: "failed" })
       .eq("id", asset.id);
+    // The multipart upload already completed, so a real object exists —
+    // remove it, or the rejected upload stays parked in R2 forever.
+    await deleteObject(asset.object_key).catch(() => {});
     return failure(
       "The uploaded file does not match the expected size. Cancel and retry.",
     );
@@ -301,6 +315,20 @@ export async function completeSourceUpload(input: {
   // Kick off the pipeline: enqueue source validation (idempotent) and move
   // the project into "preparing". Tolerates a database where migration 004
   // has not been applied yet — the project then simply stays in draft.
+  // Skipped for projects archived mid-upload: the archived-state constraint
+  // would reject "preparing", and the worker's failure path would later trip
+  // over the same constraint.
+  const { data: projectRow } = await context.supabase
+    .from("projects")
+    .select("id, archived_at")
+    .eq("id", asset.project_id)
+    .maybeSingle();
+
+  if (projectRow?.archived_at) {
+    revalidate();
+    return { ok: true };
+  }
+
   const { error: enqueueError } = await context.supabase.rpc("enqueue_job", {
     p_project_id: asset.project_id,
     p_job_type: "source_validation",

@@ -169,15 +169,24 @@ export function AppSidebar({
 
       {/* Compact actions on small screens */}
       <div className="flex items-center gap-2 lg:hidden">
+        {active === "settings" ? (
+          <Link href="/app" className="text-sm text-ink-secondary">
+            Projects
+          </Link>
+        ) : (
+          <Link
+            href="/app/settings"
+            className="text-sm text-ink-secondary"
+            aria-current={undefined}
+          >
+            Settings
+          </Link>
+        )}
         {onNewVideo ? (
           <Button size="sm" variant="primary" onClick={onNewVideo}>
             New video
           </Button>
-        ) : (
-          <Link href="/app" className="text-sm text-ink-secondary">
-            Projects
-          </Link>
-        )}
+        ) : null}
         <form action="/auth/signout" method="post">
           <Button size="sm" variant="ghost" type="submit">
             Log out

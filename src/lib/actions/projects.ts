@@ -9,6 +9,7 @@ import {
 } from "@/src/lib/creative/options";
 import type {
   CreativeDirection,
+  ProjectPipelineState,
   TargetLength,
 } from "@/src/lib/supabase/database.types";
 
@@ -138,13 +139,56 @@ export async function setProjectArchived(
   if (!context.ok) return context;
   if (!isUuid(projectId)) return failure("Invalid project id.");
 
+  // Preserve pipeline progress across archive/unarchive: archiving must
+  // overwrite pipeline_state (DB constraint), so the prior state is stashed
+  // in pre_archive_state (migration 013) and restored on unarchive. Falls
+  // back to the legacy draft-reset while migration 013 is not applied.
+  const { data: current, error: loadError } = await context.supabase
+    .from("projects")
+    .select("id, pipeline_state, pre_archive_state")
+    .eq("id", projectId)
+    .maybeSingle()
+    .overrideTypes<{
+      id: string;
+      pipeline_state: ProjectPipelineState;
+      pre_archive_state: ProjectPipelineState | null;
+    }>();
+
+  const migrationApplied = !loadError;
+  if (loadError) {
+    const { data: legacy, error: legacyError } = await context.supabase
+      .from("projects")
+      .select("id, pipeline_state")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (legacyError) return failure("The project could not be loaded.");
+    if (!legacy) return failure("Project not found.");
+  } else if (!current) {
+    return failure("Project not found.");
+  }
+
+  const update = archived
+    ? {
+        archived_at: new Date().toISOString(),
+        pipeline_state: "archived" as const,
+        ...(migrationApplied && current
+          ? { pre_archive_state: current.pipeline_state }
+          : {}),
+      }
+    : {
+        archived_at: null,
+        pipeline_state:
+          migrationApplied && current?.pre_archive_state
+            ? current.pre_archive_state
+            : "draft",
+        ...(migrationApplied ? { pre_archive_state: null } : {}),
+      };
+
   const { error, data } = await context.supabase
     .from("projects")
-    .update(
-      archived
-        ? { archived_at: new Date().toISOString(), pipeline_state: "archived" }
-        : { archived_at: null, pipeline_state: "draft" },
-    )
+    // pre_archive_state lands with migration 013; the generated types are
+    // regenerated after it is applied (npm run db:types).
+    .update(update as never)
     .eq("id", projectId)
     .select("id");
 

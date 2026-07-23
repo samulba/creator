@@ -1,10 +1,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  abortSourceUpload,
-  getSourceDownloadUrl,
-} from "@/src/lib/actions/uploads";
+import { getSourceDownloadUrl } from "@/src/lib/actions/uploads";
 import {
   creativeDirectionOptions,
   editStyleKeys,
@@ -66,42 +63,6 @@ function UploadedSourcePanel({ asset }: { asset: AssetRow }) {
         The recording is stored privately. Analysis and processing start with
         the job system in Phase 3.
       </p>
-    </div>
-  );
-}
-
-function StaleUploadPanel({
-  asset,
-  onRefresh,
-}: {
-  asset: AssetRow;
-  onRefresh: () => void;
-}) {
-  const [pending, setPending] = useState(false);
-
-  return (
-    <div className="flex aspect-video flex-col items-center justify-center border border-edge bg-black/20 px-6 text-center">
-      <p className="text-sm font-medium text-ink">An upload was interrupted</p>
-      <p className="mt-2 max-w-sm text-xs leading-5 text-ink-secondary">
-        {asset.original_filename ?? "A previous upload"} did not finish. Cancel
-        it to start over.
-      </p>
-      <Button
-        size="sm"
-        className="mt-5"
-        disabled={pending}
-        onClick={async () => {
-          setPending(true);
-          try {
-            await abortSourceUpload(asset.id);
-          } finally {
-            setPending(false);
-            onRefresh();
-          }
-        }}
-      >
-        Cancel interrupted upload
-      </Button>
     </div>
   );
 }
@@ -211,10 +172,17 @@ export function ProjectDraft({
           </div>
         ) : hasSource && sourceAsset ? (
           <UploadedSourcePanel asset={sourceAsset} />
-        ) : sourceAsset && sourceAsset.status === "uploading" ? (
-          <StaleUploadPanel asset={sourceAsset} onRefresh={onRefresh} />
         ) : storageConfigured ? (
-          <SourceUpload projectId={project.id} onUploaded={onRefresh} />
+          <SourceUpload
+            projectId={project.id}
+            staleAsset={
+              sourceAsset?.status === "uploading" ||
+              sourceAsset?.status === "failed"
+                ? sourceAsset
+                : null
+            }
+            onUploaded={onRefresh}
+          />
         ) : (
           <div className="flex aspect-video flex-col items-center justify-center border border-dashed border-warn/50 px-6 text-center">
             <p className="text-sm font-medium text-ink">

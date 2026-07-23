@@ -116,7 +116,9 @@ export const render: JobHandler = async (job, ctx) => {
   const finalPath = join(workDir, "final.mp4");
 
   try {
-    const sourceUrl = await presignGet(source.object_key);
+    // Long renders (many segments × up to 20 min each) can outlive the
+    // default 1h signature, which would fail late clips with HTTP 403.
+    const sourceUrl = await presignGet(source.object_key, 12 * 3600);
 
     // 1) Cut + normalize each segment.
     const segmentPaths: string[] = [];
@@ -185,13 +187,21 @@ export const render: JobHandler = async (job, ctx) => {
       finalProbe.durationMs === null ||
       finalProbe.durationMs <= 0 ||
       finalProbe.width === null ||
-      finalProbe.videoCodec === null ||
-      finalProbe.audioCodec === null
+      finalProbe.videoCodec === null
     ) {
       throw new JobError(
         "RENDER_VALIDATION_FAILED",
         "The rendered video failed validation (missing stream or duration).",
         { retryable: true, details: { probe: finalProbe } },
+      );
+    }
+    if (finalProbe.audioCodec === null) {
+      // A deterministic property of the source (it has no audio track), so
+      // retrying can never succeed — fail cleanly instead of looping.
+      throw new JobError(
+        "RENDER_NO_AUDIO",
+        "The source recording has no audio track, so a final video could not be produced.",
+        { retryable: false, details: { probe: finalProbe } },
       );
     }
 

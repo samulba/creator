@@ -1,19 +1,65 @@
 import { useRef, useState, type DragEvent } from "react";
 
 import { Button } from "@/components/ui/button";
+import { abortSourceUpload } from "@/src/lib/actions/uploads";
 import { formatBytes } from "@/src/lib/format";
+import type { AssetRow } from "@/src/lib/supabase/database.types";
 
 import { useSourceUpload } from "./use-source-upload";
+
+function StaleUploadPanel({
+  asset,
+  onRefresh,
+}: {
+  asset: AssetRow;
+  onRefresh: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+
+  return (
+    <div className="flex aspect-video flex-col items-center justify-center border border-edge bg-black/20 px-6 text-center">
+      <p className="text-sm font-medium text-ink">An upload was interrupted</p>
+      <p className="mt-2 max-w-sm text-xs leading-5 text-ink-secondary">
+        {asset.original_filename ?? "A previous upload"} did not finish. Cancel
+        it to start over.
+      </p>
+      <Button
+        size="sm"
+        className="mt-5"
+        disabled={pending}
+        onClick={async () => {
+          setPending(true);
+          try {
+            await abortSourceUpload(asset.id);
+          } finally {
+            setPending(false);
+            onRefresh();
+          }
+        }}
+      >
+        Cancel interrupted upload
+      </Button>
+    </div>
+  );
+}
 
 /**
  * Upload surface for the original gameplay recording: direct
  * browser→R2 multipart upload with real transfer progress.
+ *
+ * `staleAsset` is a server-known "uploading" asset row. It only means a
+ * genuinely interrupted upload when THIS component is idle — while an upload
+ * runs in this tab, the same row appears after any refresh, and showing the
+ * interrupted panel then would hide (and its cancel button would kill) the
+ * live upload.
  */
 export function SourceUpload({
   projectId,
+  staleAsset,
   onUploaded,
 }: {
   projectId: string;
+  staleAsset?: AssetRow | null;
   onUploaded: () => void;
 }) {
   const { state, start, cancel, reset } = useSourceUpload({
@@ -31,6 +77,10 @@ export function SourceUpload({
       void start(file);
     }
   };
+
+  if (state.phase === "idle" && staleAsset) {
+    return <StaleUploadPanel asset={staleAsset} onRefresh={onUploaded} />;
+  }
 
   if (state.phase === "idle") {
     return (

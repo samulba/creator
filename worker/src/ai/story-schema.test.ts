@@ -122,3 +122,29 @@ test("countCatchphrases counts occurrences for the budget", () => {
   assert.equal(counts["Textbook."], 2); // "Textbook." and "textbook." (case-insensitive)
   assert.equal(counts["Let that sink in."], 1);
 });
+
+test("normalizeStoryResult re-sequences sort orders to 0..n-1", () => {
+  const result = normalizeStoryResult(
+    {
+      title: "t",
+      angle: "a",
+      summary: "s",
+      selections: [
+        { moment_index: 0, story_role: "hook", sort_order: 5 },
+        { moment_index: 1, story_role: "setup" }, // missing → sorts last
+        { moment_index: 2, story_role: "climax", sort_order: 5 }, // duplicate value
+      ],
+    },
+    3,
+  );
+  assert.ok(result);
+  assert.deepEqual(
+    result.selections.map((s) => s.momentIndex),
+    [0, 2, 1],
+  );
+  // No duplicates or gaps may survive — later reads order by sort_order.
+  assert.deepEqual(
+    result.selections.map((s) => s.sortOrder),
+    [0, 1, 2],
+  );
+});

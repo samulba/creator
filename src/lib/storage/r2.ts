@@ -4,6 +4,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   S3Client,
@@ -129,6 +130,14 @@ export async function abortMultipartUpload(
       Key: key,
       UploadId: uploadId,
     }),
+  );
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  const { config, client } = requireStorage();
+
+  await client.send(
+    new DeleteObjectCommand({ Bucket: config.bucket, Key: key }),
   );
 }
 

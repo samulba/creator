@@ -176,7 +176,7 @@ function normalizeEvent(
 function normalizeMoment(
   raw: unknown,
   durationMs: number | null,
-  eventCount: number,
+  eventIndexMap: Map<number, number>,
 ): AnalysisMoment | null {
   const record = asRecord(raw);
   if (!record) return null;
@@ -187,18 +187,21 @@ function normalizeMoment(
   const range = normalizeRange(record.start_ms, record.end_ms, durationMs);
   if (!range) return null;
 
+  // The model produced indices against ITS events list; events may since
+  // have been dropped or re-sorted, so translate each original index into
+  // the surviving array's position (and drop indices whose event fell out).
   const indices: number[] = [];
   if (Array.isArray(record.supporting_event_indices)) {
     for (const value of record.supporting_event_indices) {
       const idx = typeof value === "number" ? value : Number(value);
+      if (!Number.isInteger(idx)) continue;
+      const mapped = eventIndexMap.get(idx);
       if (
-        Number.isInteger(idx) &&
-        idx >= 0 &&
-        idx < eventCount &&
-        !indices.includes(idx) &&
+        mapped !== undefined &&
+        !indices.includes(mapped) &&
         indices.length < MAX_SUPPORTING
       ) {
-        indices.push(idx);
+        indices.push(mapped);
       }
     }
   }
@@ -235,19 +238,23 @@ export function normalizeCoarseResult(
   const rawEvents = Array.isArray(record.events)
     ? record.events.slice(0, MAX_EVENTS)
     : [];
-  const events: AnalysisEvent[] = [];
-  for (const item of rawEvents) {
-    const event = normalizeEvent(item, durationMs);
-    if (event) events.push(event);
+  const survived: Array<{ event: AnalysisEvent; originalIndex: number }> = [];
+  for (let index = 0; index < rawEvents.length; index += 1) {
+    const event = normalizeEvent(rawEvents[index], durationMs);
+    if (event) survived.push({ event, originalIndex: index });
   }
-  events.sort((a, b) => a.startMs - b.startMs);
+  survived.sort((a, b) => a.event.startMs - b.event.startMs);
+  const events = survived.map((entry) => entry.event);
+  const eventIndexMap = new Map(
+    survived.map((entry, position) => [entry.originalIndex, position]),
+  );
 
   const rawMoments = Array.isArray(record.moments)
     ? record.moments.slice(0, MAX_MOMENTS)
     : [];
   const moments: AnalysisMoment[] = [];
   for (const item of rawMoments) {
-    const moment = normalizeMoment(item, durationMs, events.length);
+    const moment = normalizeMoment(item, durationMs, eventIndexMap);
     if (moment) moments.push(moment);
   }
   moments.sort((a, b) => a.startMs - b.startMs);

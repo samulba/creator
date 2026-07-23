@@ -40,16 +40,18 @@ export function NewVideoDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  // While creation is in flight the dialog must not close: the project would
+  // still be created invisibly, inviting a duplicate re-submit.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !pending) {
         onClose();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, pending]);
 
   const channel = channels.find((entry) => entry.id === channelId) ?? null;
   const defaultCharacter = channel
@@ -95,7 +97,9 @@ export function NewVideoDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8"
-      onClick={onClose}
+      onClick={() => {
+        if (!pending) onClose();
+      }}
     >
       <section
         role="dialog"

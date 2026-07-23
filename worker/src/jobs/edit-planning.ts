@@ -6,6 +6,7 @@ import {
   loadActiveCreativeSettings,
   loadLatestScriptVersion,
   loadOriginalSource,
+  loadScriptVersion,
   loadScriptSections,
   loadSelectedStory,
   loadStoryBeats,
@@ -42,7 +43,13 @@ export const editPlanning: JobHandler = async (job, ctx) => {
     });
   }
 
-  const script = await loadLatestScriptVersion(job.project_id);
+  // Use the script version this run was enqueued for (the one that was
+  // narrated) — "latest" could be a newer, unnarrated regeneration whose
+  // sections have no audio, which would silently render without narration.
+  const payload = job.payload as { script_version_id?: string };
+  const script = payload.script_version_id
+    ? await loadScriptVersion(payload.script_version_id)
+    : await loadLatestScriptVersion(job.project_id);
   const sections = script ? await loadScriptSections(script.id) : [];
   const settings = await loadActiveCreativeSettings(job.project_id);
   const source = await loadOriginalSource(job.project_id);

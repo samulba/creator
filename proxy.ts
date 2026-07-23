@@ -49,12 +49,23 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // getUser() may have rotated the session; any redirect must carry the
+  // refreshed auth cookies or the rotated refresh token is lost and the
+  // user gets logged out on the next request.
+  const redirectWithCookies = (url: URL) => {
+    const redirect = NextResponse.redirect(url);
+    for (const cookie of response.cookies.getAll()) {
+      redirect.cookies.set(cookie);
+    }
+    return redirect;
+  };
+
   if (!user && request.nextUrl.pathname.startsWith("/app")) {
-    return NextResponse.redirect(buildLoginUrl(request));
+    return redirectWithCookies(buildLoginUrl(request));
   }
 
   if (user && ["/login", "/signup"].includes(request.nextUrl.pathname)) {
-    return NextResponse.redirect(new URL("/app", request.url));
+    return redirectWithCookies(new URL("/app", request.url));
   }
 
   return response;

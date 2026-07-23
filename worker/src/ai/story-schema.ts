@@ -162,11 +162,22 @@ export function normalizeStoryResult(
       selections.push({
         momentIndex,
         storyRole,
-        sortOrder: sortOrder !== null && sortOrder >= 0 ? sortOrder : selections.length,
+        // Missing sort_order sinks below explicit values; ties are broken by
+        // arrival order in the stable sort below.
+        sortOrder:
+          sortOrder !== null && sortOrder >= 0
+            ? sortOrder
+            : Number.MAX_SAFE_INTEGER,
       });
     }
   }
+  // RE-SEQUENCE to 0..n-1 (like script sections): raw model values may
+  // collide or leave gaps, and duplicate sort_order values would make the
+  // beat order nondeterministic on later reads.
   selections.sort((a, b) => a.sortOrder - b.sortOrder);
+  selections.forEach((selection, index) => {
+    selection.sortOrder = index;
+  });
 
   return {
     title: cleanString(record.title, TITLE_MAX),

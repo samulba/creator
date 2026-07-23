@@ -223,3 +223,31 @@ test("buildCoarsePrompt grounds the request and includes persona + dials", () =>
   assert.match(prompt, /Never fabricate/);
   assert.match(prompt, new RegExp(PROMPT_TEMPLATE_VERSION));
 });
+
+test("normalizeCoarseResult remaps moment links when events are dropped or re-sorted", () => {
+  const result = normalizeCoarseResult(
+    {
+      summary: "x",
+      events: [
+        { event_type: "late", start_ms: 5000, end_ms: 6000 }, // original 0 → sorted 1
+        { event_type: "gone", start_ms: 50_000, end_ms: 51_000 }, // original 1 → dropped
+        { event_type: "early", start_ms: 0, end_ms: 100 }, // original 2 → sorted 0
+      ],
+      moments: [
+        {
+          moment_type: "m",
+          start_ms: 0,
+          end_ms: 100,
+          supporting_event_indices: [0, 1, 2],
+        },
+      ],
+    },
+    { durationMs: 10_000 },
+  );
+  assert.ok(result);
+  assert.equal(result.events[0]?.eventType, "early");
+  assert.equal(result.events[1]?.eventType, "late");
+  // Original indices must be translated into surviving positions: 0 → 1,
+  // 1 → dropped, 2 → 0. Untranslated indices would mispoint the links.
+  assert.deepEqual(result.moments[0]?.supportingEventIndices, [1, 0]);
+});

@@ -244,16 +244,20 @@ export function CreatorApp({
 
   const runProjectAction = async (
     action: () => Promise<{ ok: boolean } & { error?: string }>,
-  ) => {
+  ): Promise<boolean> => {
     setPending(true);
     setActionError(null);
     try {
       const result = await action();
       if (!result.ok) {
         setActionError(result.error ?? "The action failed.");
-        return;
+        return false;
       }
       router.refresh();
+      return true;
+    } catch {
+      setActionError("The action failed. Check your connection and retry.");
+      return false;
     } finally {
       setPending(false);
     }
@@ -377,11 +381,15 @@ export function CreatorApp({
                             variant="danger"
                             disabled={pending}
                             onClick={async () => {
-                              await runProjectAction(() =>
+                              const ok = await runProjectAction(() =>
                                 deleteProject(selectedProject.id),
                               );
-                              setConfirmingDelete(false);
-                              setSelectedProjectId(null);
+                              // Keep the selection when deletion failed so
+                              // the user still looks at the affected project.
+                              if (ok) {
+                                setConfirmingDelete(false);
+                                setSelectedProjectId(null);
+                              }
                             }}
                           >
                             Delete
@@ -423,12 +431,14 @@ export function CreatorApp({
                   {selectedProject.pipeline_state !== "draft" &&
                   selectedProject.pipeline_state !== "archived" ? (
                     <ProjectPipeline
+                      key={selectedProject.id}
                       project={selectedProject}
                       jobs={jobsByProject.get(selectedProject.id) ?? []}
                       onRefresh={() => router.refresh()}
                     />
                   ) : (
                     <ProjectDraft
+                      key={selectedProject.id}
                       project={selectedProject}
                       settings={
                         settingsByProject.get(selectedProject.id) ?? null

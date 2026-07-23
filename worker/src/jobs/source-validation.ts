@@ -18,10 +18,13 @@ export const sourceValidation: JobHandler = async (job, ctx) => {
     });
   }
   if (asset.status !== "available") {
+    // Retryable so a fresh upload can settle; if the retry budget runs out
+    // the project must fail visibly — with failProject: false it would hang
+    // in "preparing" forever with nothing for the user to retry.
     throw new JobError(
       "SOURCE_NOT_READY",
       "The uploaded source is not ready.",
-      { retryable: true, failProject: false },
+      { retryable: true, failProject: true },
     );
   }
 
