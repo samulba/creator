@@ -59,6 +59,7 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | `applied/009_narration_assets.sql`           | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/010_edit_engine.sql`                | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/011_render_engine.sql`              | **Applied** — executed successfully in the Supabase SQL Editor |
+| `migrations/012_project_deletion_rpc.sql`    | **Pending** — fixes project soft-delete (RLS)                  |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
@@ -81,6 +82,8 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 `010_edit_engine.sql` adds the `edit_status` enum and the `edit_versions` (inspectable Edit Decision List: jsonb EDL + summary) and `edit_segments` (normalized, one row per output segment with its source range) tables (Phase 8). The EDL is deterministic — no AI provider — and a composite FK ties each segment's source clip to the same project. Owner-scoped read-only RLS; worker writes via service_role.
 
 `011_render_engine.sql` adds the `output_version_status`, `render_status`, and `qc_status` enums and the `output_versions` (a produced story+script+edit combination; partial uniques for one current + one approved per project) and `render_attempts` (each FFmpeg run, with technical metadata) tables (Phase 9). Composite FKs tie the final/output/intermediate assets to the same project. The `qc_status` enum is reused by Phase 10. Owner-scoped read-only RLS; worker writes via service_role.
+
+`012_project_deletion_rpc.sql` adds the `request_project_deletion(uuid)` SECURITY DEFINER function so a user can soft-delete their own project. A plain `UPDATE` that sets `deleted_at` is rejected by RLS — Postgres applies the `deleted_at is null` SELECT policy as a check on the produced row — so the delete goes through this function, which enforces ownership itself (`user_id = auth.uid()`). Granted to `authenticated`.
 
 ## After applying a migration
 

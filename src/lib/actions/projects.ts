@@ -167,16 +167,17 @@ export async function deleteProject(projectId: string): Promise<ActionResult> {
   if (!context.ok) return context;
   if (!isUuid(projectId)) return failure("Invalid project id.");
 
-  const now = new Date().toISOString();
-
-  const { error, data } = await context.supabase
-    .from("projects")
-    .update({ delete_requested_at: now, deleted_at: now })
-    .eq("id", projectId)
-    .select("id");
+  // Soft delete runs through a SECURITY DEFINER RPC (migration 012): a plain
+  // UPDATE that sets deleted_at is rejected by RLS, because the projects SELECT
+  // policy filters `deleted_at is null` and Postgres applies it as a check on
+  // the produced row. The RPC enforces ownership itself.
+  const { data, error } = await context.supabase.rpc(
+    "request_project_deletion",
+    { p_project_id: projectId },
+  );
 
   if (error) return failure("The project could not be deleted.");
-  if (!data?.length) return failure("Project not found.");
+  if (!data) return failure("Project not found.");
 
   revalidate();
   return { ok: true };

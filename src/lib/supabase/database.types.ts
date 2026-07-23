@@ -561,6 +561,10 @@ export type Database = {
         Args: { p_job_id: string };
         Returns: boolean;
       };
+      request_project_deletion: {
+        Args: { p_project_id: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       project_pipeline_state: ProjectPipelineState;
