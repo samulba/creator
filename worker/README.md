@@ -31,12 +31,15 @@ A deeper per-moment analysis pass (`deep_analysis`) is a planned refinement
 that can be inserted between coarse analysis and story generation later; the
 current mainline goes coarse → story directly.
 
-The worker never downloads multi-GB sources just to read them: FFprobe and
-FFmpeg read the presigned URL directly over HTTP range requests. Only the
-generated proxy is written to local temp storage, and it is cleaned up after
-upload (even on failure). Coarse analysis reads the small proxy (not the
-original), uploads it to the Gemini File API, and deletes it from Gemini when
-the pass finishes.
+Metadata reads never download the source: FFprobe reads the presigned URL
+over HTTP range requests. The **render** step is the exception — it downloads
+the original once to local temp disk and cuts all clips from the local copy
+(seeking into a presigned URL per clip proved slow and timeout-prone for long
+recordings; if the download itself fails, it falls back to URL streaming).
+FFmpeg timeouts scale with the clip/timeline duration instead of a fixed cap,
+and all temp files are cleaned up after upload (even on failure). Coarse
+analysis reads the small proxy (not the original), uploads it to the Gemini
+File API, and deletes it from Gemini when the pass finishes.
 
 ## AI pipeline (Phases 5–7)
 

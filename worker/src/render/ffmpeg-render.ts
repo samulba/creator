@@ -18,6 +18,33 @@ import { run } from "../ffmpeg.js";
 
 const SEGMENT_TIMEOUT_MS = 20 * 60_000;
 
+/**
+ * Timeout that scales with the media being processed: a fixed buffer plus a
+ * generous multiple of the clip/timeline duration, never below the legacy
+ * 20-minute floor. A fixed timeout broke long videos — encoding a 20-minute
+ * clip on a small shared vCPU legitimately takes longer than 20 minutes,
+ * and the old cap turned that into an endless timeout→retry loop.
+ */
+export function scaledTimeoutMs(durationMs: number, factor = 3): number {
+  const scaled = 5 * 60_000 + Math.round(Math.max(0, durationMs) * factor);
+  return Math.max(SEGMENT_TIMEOUT_MS, scaled);
+}
+
+/**
+ * Parses the `time=HH:MM:SS.cc` field from an ffmpeg stderr progress line
+ * into milliseconds of processed output — the basis for honest within-step
+ * progress. Returns null for lines without a usable time (e.g. `time=N/A`).
+ */
+export function parseFfmpegTimeMs(line: string): number | null {
+  const match = /time=(\d+):(\d{2}):(\d{2})(?:\.(\d+))?/.exec(line);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  const fraction = match[4] ? Number(`0.${match[4]}`) : 0;
+  return Math.round(((hours * 60 + minutes) * 60 + seconds + fraction) * 1000);
+}
+
 function msToSeconds(ms: number): string {
   return (ms / 1000).toFixed(3);
 }
@@ -33,7 +60,12 @@ export async function extractSegment(
   startMs: number,
   endMs: number,
   outputPath: string,
-  options: { height: number; fps: number; onProgress?: (line: string) => void },
+  options: {
+    height: number;
+    fps: number;
+    timeoutMs?: number;
+    onProgress?: (line: string) => void;
+  },
 ): Promise<void> {
   const durationMs = Math.max(1, endMs - startMs);
   await run(
@@ -64,7 +96,10 @@ export async function extractSegment(
       "90000",
       outputPath,
     ],
-    { timeoutMs: SEGMENT_TIMEOUT_MS, onStderr: options.onProgress },
+    {
+      timeoutMs: options.timeoutMs ?? SEGMENT_TIMEOUT_MS,
+      onStderr: options.onProgress,
+    },
   );
 }
 
@@ -149,9 +184,14 @@ export async function mixFinal(
   gameplayPath: string,
   narrationPath: string | null,
   outputPath: string,
-  options: { audioBitrate?: string; onProgress?: (line: string) => void } = {},
+  options: {
+    audioBitrate?: string;
+    timeoutMs?: number;
+    onProgress?: (line: string) => void;
+  } = {},
 ): Promise<void> {
   const audioBitrate = options.audioBitrate ?? "192k";
+  const timeoutMs = options.timeoutMs ?? SEGMENT_TIMEOUT_MS;
 
   if (!narrationPath) {
     await run(
@@ -174,7 +214,7 @@ export async function mixFinal(
         "+faststart",
         outputPath,
       ],
-      { timeoutMs: SEGMENT_TIMEOUT_MS, onStderr: options.onProgress },
+      { timeoutMs, onStderr: options.onProgress },
     );
     return;
   }
@@ -218,6 +258,6 @@ export async function mixFinal(
       "-shortest",
       outputPath,
     ],
-    { timeoutMs: SEGMENT_TIMEOUT_MS, onStderr: options.onProgress },
+    { timeoutMs, onStderr: options.onProgress },
   );
 }
