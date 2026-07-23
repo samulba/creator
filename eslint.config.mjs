@@ -11,6 +11,7 @@ const eslintConfig = [
       "out/**",
       "dist/**",
       "coverage/**",
+      "worker/**",
     ],
   },
 ];

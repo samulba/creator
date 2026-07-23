@@ -1,0 +1,146 @@
+import { randomUUID } from "node:crypto";
+
+import { env } from "./env.js";
+import { handlers, supportedJobTypes, type JobContext } from "./jobs/index.js";
+import { logger } from "./logger.js";
+import {
+  claimNextJob,
+  completeJob,
+  failJob,
+  heartbeatJob,
+  isProjectActive,
+  startJob,
+} from "./supabase.js";
+import { JobError, type ProcessingJob } from "./types.js";
+
+const workerId = `${env.workerName}-${randomUUID().slice(0, 8)}`;
+
+let shuttingDown = false;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runJob(job: ProcessingJob): Promise<void> {
+  const handler = handlers[job.job_type];
+  if (!handler) {
+    // Should not happen — we only claim supported types.
+    await failJob(job.id, workerId, {
+      code: "UNSUPPORTED_JOB",
+      message: "This worker cannot run this job type.",
+      retryable: false,
+      failProject: false,
+    });
+    return;
+  }
+
+  // Skip work for projects that were cancelled/deleted mid-flight.
+  if (!(await isProjectActive(job.project_id))) {
+    await completeJob(job.id, workerId, { skipped: "project_inactive" });
+    logger.info("job skipped (project inactive)", {
+      job_id: job.id,
+      job_type: job.job_type,
+    });
+    return;
+  }
+
+  const ctx: JobContext = {
+    heartbeat: (progress) => heartbeatJob(job.id, workerId, progress),
+  };
+
+  await startJob(job.id, workerId);
+  logger.info("job started", {
+    job_id: job.id,
+    job_type: job.job_type,
+    project_id: job.project_id,
+    attempt: job.attempt_count + 1,
+  });
+
+  try {
+    const result = await handler(job, ctx);
+    await completeJob(job.id, workerId, result);
+    logger.info("job succeeded", { job_id: job.id, job_type: job.job_type });
+  } catch (error) {
+    if (error instanceof JobError) {
+      await failJob(job.id, workerId, {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        retryable: error.retryable,
+        failProject: error.failProject,
+      });
+      logger.warn("job failed", {
+        job_id: job.id,
+        job_type: job.job_type,
+        code: error.code,
+        retryable: error.retryable,
+      });
+    } else {
+      const message = error instanceof Error ? error.message : "unknown error";
+      await failJob(job.id, workerId, {
+        code: "WORKER_ERROR",
+        message: "A processing step did not complete.",
+        details: { reason: message },
+        retryable: true,
+        failProject: true,
+      });
+      logger.error("job crashed", {
+        job_id: job.id,
+        job_type: job.job_type,
+        reason: message,
+      });
+    }
+  }
+}
+
+async function loop(): Promise<void> {
+  logger.info("worker started", {
+    worker_id: workerId,
+    supported: supportedJobTypes,
+  });
+
+  while (!shuttingDown) {
+    let job: ProcessingJob | null = null;
+    try {
+      job = await claimNextJob(workerId, supportedJobTypes);
+    } catch (error) {
+      logger.error("claim failed", {
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+      await sleep(env.pollIntervalMs);
+      continue;
+    }
+
+    if (!job) {
+      await sleep(env.pollIntervalMs);
+      continue;
+    }
+
+    // A failure here (e.g. DB blip while completing) must not kill the loop.
+    try {
+      await runJob(job);
+    } catch (error) {
+      logger.error("job handling error", {
+        job_id: job.id,
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
+
+  logger.info("worker stopped", { worker_id: workerId });
+}
+
+function onShutdown(signal: string) {
+  logger.info("shutdown requested", { signal });
+  shuttingDown = true;
+}
+
+process.on("SIGTERM", () => onShutdown("SIGTERM"));
+process.on("SIGINT", () => onShutdown("SIGINT"));
+
+loop().catch((error) => {
+  logger.error("worker fatal", {
+    reason: error instanceof Error ? error.message : "unknown",
+  });
+  process.exit(1);
+});

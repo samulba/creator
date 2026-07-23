@@ -8,8 +8,10 @@ Creator is a professional AI-powered web application for turning raw Dead by Day
 - **Authentication** (`/login`, `/signup`, `/auth/callback`, `/auth/signout`) — Supabase Auth with protected routes.
 - **Application** (`/app`) — protected workspace with real Supabase-backed projects, channel-first creation, and direct-to-R2 gameplay uploads. `/app/settings` manages channels and narrator characters (see `docs/CHANNEL_CHARACTER_MODEL.md`). The end-to-end pipeline experience is visible as a clearly labeled demo under "Product preview".
 - **Storage** — private Cloudflare R2 bucket; browser uploads go directly to R2 via server-signed multipart URLs (`src/lib/storage/`, `src/lib/actions/uploads.ts`).
-- **Database** — migrations 001–002 applied, 003 (`assets`) pending; see `supabase/README.md`.
-- **Not built yet** — processing pipeline (jobs, workers, AI analysis, voice, edit, render): Phases 3–10.
+- **Job system** — Postgres-based queue (`supabase/applied/004_processing_jobs.sql`); uploads enqueue `source_validation`, the workspace shows semantic pipeline progress.
+- **Video worker** — a standalone Docker service in `worker/` that claims jobs and runs FFprobe/FFmpeg (source validation, media probe, proxy generation). Deploys outside Vercel; see `worker/README.md`.
+- **Database** — migrations 001–004 applied; see `supabase/README.md`.
+- **Not built yet** — AI pipeline (Gemini analysis, story, ElevenLabs voice, edit, render, QC): Phases 5–10.
 
 ## Structure
 
@@ -28,6 +30,7 @@ src/
 supabase/
   migrations/   pending SQL migrations (not yet executed)
   applied/      migrations already executed in the Supabase SQL Editor
+worker/         standalone video worker (Docker, FFmpeg) — deploy off-Vercel
 docs/           product, architecture, and design documentation
 proxy.ts        session refresh + route protection
 ```

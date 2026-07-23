@@ -1,0 +1,25 @@
+{
+  "name": "creator-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Creator video worker — claims processing jobs and runs FFprobe/FFmpeg outside the web app.",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1093.0",
+    "@aws-sdk/s3-request-presigner": "3.1093.0",
+    "@supabase/supabase-js": "2.110.7"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "6.0.2"
+  }
+}

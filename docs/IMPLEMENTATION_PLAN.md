@@ -206,6 +206,18 @@ Do not tightly couple product logic to one queue provider.
 
 # Phase 4 — Video Worker
 
+Status: 4.1, 4.2, and 4.3 are **done**. The worker lives in `worker/` as a
+self-contained Docker service (excluded from the web app's tooling). It polls
+the queue via `claim_next_job`, runs FFprobe over presigned URLs, generates a
+downscaled proxy with FFmpeg, and advances the pipeline through the
+*Preparing footage* stage into *Understanding gameplay*. Job chain:
+`source_validation → media_probe → proxy_generation → coarse_analysis`
+(the last stays queued until Phase 5). FFprobe/FFmpeg parsing and proxy
+transcoding are verified locally against generated media; deployment +
+service-role/R2 secrets are documented in `worker/README.md` and set up by
+the operator. No new migration was required — migrations 003/004 already
+cover the assets and jobs schema.
+
 ## 4.1 Worker Foundation
 
 Create a separate containerized worker.
@@ -217,8 +229,11 @@ Include:
 * FFprobe
 * job execution
 * structured logging
-* health checks
-* graceful failure handling
+* graceful failure handling (lease renewal via heartbeat; SIGTERM-aware loop)
+
+A background worker has no inbound HTTP surface, so there is no health
+endpoint; liveness is observed through job throughput and the container
+host's process supervision.
 
 ---
 
