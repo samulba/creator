@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,20 @@ const pipelineDisplay: Record<
   archived: { label: "Archived", tone: "neutral", activity: "Archived" },
   deleting: { label: "Deleting", tone: "neutral", activity: "Deleting" },
 };
+
+/** Pipeline states where the worker is actively progressing the project, so
+ * the UI should poll for updates. Terminal/idle states are excluded. */
+const LIVE_STATES = new Set<ProjectPipelineState>([
+  "preparing",
+  "understanding_gameplay",
+  "building_story",
+  "generating_voice",
+  "building_edit",
+  "rendering",
+  "checking_quality",
+]);
+
+const REFRESH_INTERVAL_MS = 6000;
 
 type CreatorAppProps = {
   userEmail: string;
@@ -205,6 +219,21 @@ export function CreatorApp({
   const selectedDemo =
     demoProjects.find((project) => project.id === selectedDemoId) ??
     demoProjects[0];
+
+  // While any real project is actively processing, poll server state so the
+  // pipeline view advances on its own as the worker completes stages.
+  const hasLiveProject = projects.some((project) =>
+    LIVE_STATES.has(project.pipeline_state),
+  );
+  useEffect(() => {
+    if (view === "preview" || !hasLiveProject) {
+      return;
+    }
+    const interval = setInterval(() => {
+      router.refresh();
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [view, hasLiveProject, router]);
 
   const runProjectAction = async (
     action: () => Promise<{ ok: boolean } & { error?: string }>,
