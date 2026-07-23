@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { StageList, type Stage } from "@/components/ui/stage-list";
@@ -46,8 +46,7 @@ function stagesFor(state: ProjectPipelineState): Stage[] {
 }
 
 const jobStatusCopy: Record<UserJobRow["status"], string> = {
-  queued:
-    "Queued — waiting for a processing worker (workers arrive in Phase 4)",
+  queued: "Queued — waiting for a free worker",
   leased: "Picked up by a worker",
   running: "Working",
   retry_scheduled: "A step failed — Creator will retry automatically",
@@ -55,6 +54,34 @@ const jobStatusCopy: Record<UserJobRow["status"], string> = {
   failed: "Failed",
   cancelled: "Cancelled",
 };
+
+/** What each stage does + a rough sense of how long it takes, so the live
+ * view sets the right expectation instead of feeling stuck. */
+const stageHint: Partial<Record<ProjectPipelineState, string>> = {
+  preparing:
+    "Reading the recording and making a lightweight analysis copy. Scales with video length — often a few minutes.",
+  understanding_gameplay:
+    "The AI watches the match for chases, hooks, and turning points. Usually 1–4 minutes.",
+  building_story:
+    "Choosing the strongest angle and writing timestamp-aware narration. Usually under a minute.",
+  generating_voice:
+    "Recording the narration with the channel's voice. Roughly 10–30 seconds per line.",
+  building_edit: "Planning the cut from the chosen moments. A few seconds.",
+  rendering:
+    "Cutting, mixing narration, and encoding the final video. Scales with length — often several minutes.",
+  checking_quality: "Final technical and consistency checks.",
+};
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
+  }
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
 
 /**
  * Workspace view for a real project inside the processing pipeline
@@ -79,6 +106,25 @@ export function ProjectPipeline({
     ) ??
     jobs.find((job) => job.status === "failed") ??
     null;
+
+  const isProcessing =
+    activeJob !== null && ["running", "leased"].includes(activeJob.status);
+
+  // Live elapsed timer for the current step (ticks once a second while a job
+  // is actively running, so the view shows progress instead of feeling stuck).
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (!isProcessing) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isProcessing, activeJob?.id]);
+
+  const startedAtMs = activeJob?.started_at
+    ? Date.parse(activeJob.started_at)
+    : null;
+  const elapsedMs =
+    isProcessing && now > 0 && startedAtMs !== null ? now - startedAtMs : null;
+  const hint = stageHint[project.pipeline_state] ?? null;
 
   const isFailed = project.pipeline_state === "failed";
 
@@ -153,26 +199,43 @@ export function ProjectPipeline({
         <StageList stages={stagesFor(project.pipeline_state)} />
       </div>
 
+      {hint ? (
+        <p className="mt-3 text-xs leading-5 text-ink-muted">{hint}</p>
+      ) : null}
+
       {activeJob ? (
         <section className="mt-8">
           <SectionHeader>Current step</SectionHeader>
           <div className="flex items-center justify-between gap-4 border-b border-edge py-3">
             <div>
               <p className="text-sm text-ink">
-                {jobStatusCopy[activeJob.status]}
+                {activeJob.current_activity ?? jobStatusCopy[activeJob.status]}
               </p>
-              {activeJob.progress_stage ? (
-                <p className="mt-1 text-xs text-ink-muted">
-                  {activeJob.progress_stage}
-                </p>
+              <p className="mt-1 text-xs text-ink-muted">
+                {activeJob.progress_stage ?? jobStatusCopy[activeJob.status]}
+                {activeJob.attempt_count > 1
+                  ? ` · attempt ${activeJob.attempt_count}`
+                  : ""}
+              </p>
+            </div>
+            <div className="text-right">
+              {elapsedMs !== null ? (
+                <span className="font-mono text-xs text-ink-secondary tabular-nums">
+                  {formatElapsed(elapsedMs)}
+                </span>
+              ) : null}
+              {activeJob.progress_percent !== null ? (
+                <span className="mt-0.5 block font-mono text-xs text-ink-muted tabular-nums">
+                  {activeJob.progress_percent}%
+                </span>
               ) : null}
             </div>
-            {activeJob.progress_percent !== null ? (
-              <span className="tabular font-mono text-xs text-ink-secondary">
-                {activeJob.progress_percent}%
-              </span>
-            ) : null}
           </div>
+          {isProcessing ? (
+            <p className="mt-2 text-xs text-ink-muted">
+              Live — this page updates every few seconds while Creator works.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
