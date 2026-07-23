@@ -154,7 +154,7 @@ export function AppSidebar({
         <p className="text-[11px] tracking-wider text-ink-muted uppercase">
           Signed in
         </p>
-        <p className="mt-1.5 truncate text-xs text-ink-secondary">
+        <p className="selectable mt-1.5 truncate text-xs text-ink-secondary">
           {userEmail}
         </p>
         <form action="/auth/signout" method="post" className="mt-3">

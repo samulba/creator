@@ -96,6 +96,24 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * App chrome should feel like a native application, not a document: no
+ * accidental text selection on labels, headings, or navigation. Form fields
+ * and anything explicitly marked `.selectable` stay copyable.
+ */
+.app-shell {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.app-shell input,
+.app-shell textarea,
+.app-shell select,
+.app-shell [contenteditable="true"],
+.app-shell .selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* A raised panel: surface + hairline top highlight + soft shadow. */
 .panel {
   background: var(--color-surface);
