@@ -129,10 +129,12 @@ Important: RLS on `assets` does not authorize R2 access by itself. R2 access mus
 
 ### `processing_jobs`
 
-- `select`: owner can read sanitized job fields for own project. Avoid exposing `payload`, `result`, and `error_details` directly in public API responses even if RLS permits row visibility.
-- `insert/update/delete`: no browser access. Jobs are created and mutated by server/worker only.
+Implemented in migration 004:
 
-If direct Supabase client access might expose all columns, create a view such as `public_user_jobs` with safe columns and grant browser access to the view instead of the base table.
+- No direct access for `authenticated`/`anon` at all (grants revoked, RLS enabled with no policies).
+- Owners read sanitized job state through the `public_user_jobs` view (owner-filtered via `auth.uid()`; excludes `payload`, `result`, `error_details`, priority, idempotency keys, and lease internals).
+- User writes happen only through security-definer RPCs with internal ownership checks: `enqueue_job` (whitelisted job types only) and `retry_job`.
+- Worker RPCs (`claim_next_job`, `start_job`, `heartbeat_job`, `complete_job`, `fail_job`) are executable by `service_role` only.
 
 ### Generated data tables
 

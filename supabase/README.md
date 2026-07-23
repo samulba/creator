@@ -50,13 +50,16 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | ----------------------------------------- | -------------------------------------------------------------------- |
 | `applied/001_supabase_foundation.sql`     | **Applied** — executed successfully in the Supabase SQL Editor       |
 | `applied/002_channels_and_characters.sql` | **Applied** — executed successfully in the Supabase SQL Editor       |
-| `migrations/003_assets.sql`               | **Pending** — has not been executed against the Supabase project yet |
+| `applied/003_assets.sql`                  | **Applied** — executed successfully in the Supabase SQL Editor       |
+| `migrations/004_processing_jobs.sql`      | **Pending** — has not been executed against the Supabase project yet |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
 `002_channels_and_characters.sql` added the `characters` (reusable narrator identities: voice + speech style) and `channels` (YouTube channel defaults + edit style) tables with owner-scoped RLS, plus `projects.channel_id`, `project_creative_settings.character_id` / `edit_style`, and `profiles.default_character_id`.
 
-`003_assets.sql` adds the `asset_type`/`asset_status` enums and the `assets` table (private R2 object metadata: original gameplay sources now, generated media later) with owner-scoped read-only RLS, one-active-original-per-project enforcement, and `projects.source_asset_id`.
+`003_assets.sql` added the `asset_type`/`asset_status` enums and the `assets` table (private R2 object metadata: original gameplay sources now, generated media later) with owner-scoped read-only RLS, one-active-original-per-project enforcement, and `projects.source_asset_id`.
+
+`004_processing_jobs.sql` adds the Postgres job queue: `job_type`/`job_status` enums, the `processing_jobs` table (users have no direct access), the sanitized `public_user_jobs` view, user RPCs `enqueue_job`/`retry_job`, worker RPCs `claim_next_job`/`start_job`/`heartbeat_job`/`complete_job`/`fail_job` (service_role only), and `assets.created_by_job_id`.
 
 ## After applying a migration
 

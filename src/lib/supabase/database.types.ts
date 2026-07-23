@@ -34,6 +34,30 @@ export type AssetType =
   | "captions"
   | "preview_image";
 
+export type JobType =
+  | "source_validation"
+  | "media_probe"
+  | "proxy_generation"
+  | "coarse_analysis"
+  | "candidate_detection"
+  | "deep_analysis"
+  | "story_generation"
+  | "script_generation"
+  | "voice_generation"
+  | "edit_planning"
+  | "render"
+  | "quality_control"
+  | "asset_deletion";
+
+export type JobStatus =
+  | "queued"
+  | "leased"
+  | "running"
+  | "retry_scheduled"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
 export type AssetStatus =
   | "pending"
   | "uploading"
@@ -253,8 +277,47 @@ export type Database = {
         Relationships: [];
       };
     };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Views: {
+      /** Sanitized owner-scoped job state (migration 004). */
+      public_user_jobs: {
+        Row: {
+          id: string;
+          project_id: string;
+          job_type: JobType;
+          status: JobStatus;
+          attempt_count: number;
+          max_attempts: number;
+          progress_percent: number | null;
+          progress_stage: string | null;
+          current_activity: string | null;
+          error_code: string | null;
+          error_message: string | null;
+          scheduled_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Relationships: [];
+      };
+    };
+    Functions: {
+      enqueue_job: {
+        Args: {
+          p_project_id: string;
+          p_job_type: JobType;
+          p_idempotency_key: string;
+          p_payload?: Json;
+          p_priority?: number;
+          p_parent_job_id?: string | null;
+        };
+        Returns: string;
+      };
+      retry_job: {
+        Args: { p_job_id: string };
+        Returns: boolean;
+      };
+    };
     Enums: {
       project_pipeline_state: ProjectPipelineState;
       asset_type: AssetType;
@@ -271,3 +334,4 @@ export type ProjectCreativeSettingsRow =
 export type CharacterRow = Database["public"]["Tables"]["characters"]["Row"];
 export type ChannelRow = Database["public"]["Tables"]["channels"]["Row"];
 export type AssetRow = Database["public"]["Tables"]["assets"]["Row"];
+export type UserJobRow = Database["public"]["Views"]["public_user_jobs"]["Row"];

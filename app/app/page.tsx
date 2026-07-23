@@ -10,6 +10,7 @@ import type {
   CharacterRow,
   ProjectCreativeSettingsRow,
   ProjectRow,
+  UserJobRow,
 } from "@/src/lib/supabase/database.types";
 
 // Auth state must be evaluated per request, even when Supabase env is
@@ -58,6 +59,7 @@ export default async function AppPage() {
   let channels: ChannelRow[] = [];
   let characters: CharacterRow[] = [];
   let sourceAssets: AssetRow[] = [];
+  let jobs: UserJobRow[] = [];
   let schemaReady = true;
   let assetsReady = true;
 
@@ -109,6 +111,16 @@ export default async function AppPage() {
     } else {
       sourceAssets = assetsResult.data;
     }
+
+    // Sanitized job state (view exists after migration 004; degrade quietly).
+    const jobsResult = await supabase
+      .from("public_user_jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!jobsResult.error) {
+      jobs = jobsResult.data;
+    }
   }
 
   return (
@@ -119,6 +131,7 @@ export default async function AppPage() {
       channels={channels}
       characters={characters}
       sourceAssets={sourceAssets}
+      jobs={jobs}
       schemaReady={schemaReady}
       assetsReady={assetsReady}
       storageConfigured={Boolean(getOptionalStorageConfig())}

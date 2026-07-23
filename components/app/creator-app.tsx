@@ -15,12 +15,14 @@ import type {
   ProjectCreativeSettingsRow,
   ProjectPipelineState,
   ProjectRow,
+  UserJobRow,
 } from "@/src/lib/supabase/database.types";
 
 import { AppSidebar } from "./app-sidebar";
 import { demoProjects, statusTone } from "./demo-data";
 import { NewVideoDialog } from "./new-video-dialog";
 import { ProjectDraft } from "./project-draft";
+import { ProjectPipeline } from "./project-pipeline";
 import { ProjectFailed } from "./project-failed";
 import {
   ProjectProgress,
@@ -103,6 +105,7 @@ type CreatorAppProps = {
   channels: ChannelRow[];
   characters: CharacterRow[];
   sourceAssets: AssetRow[];
+  jobs: UserJobRow[];
   /** False while migration 002 has not been applied to the database yet. */
   schemaReady: boolean;
   /** False while migration 003 has not been applied to the database yet. */
@@ -118,6 +121,7 @@ export function CreatorApp({
   channels,
   characters,
   sourceAssets,
+  jobs,
   schemaReady,
   assetsReady,
   storageConfigured,
@@ -148,6 +152,16 @@ export function CreatorApp({
     }
     return map;
   }, [sourceAssets]);
+
+  const jobsByProject = useMemo(() => {
+    const map = new Map<string, UserJobRow[]>();
+    for (const job of jobs) {
+      const list = map.get(job.project_id) ?? [];
+      list.push(job);
+      map.set(job.project_id, list);
+    }
+    return map;
+  }, [jobs]);
 
   const channelNameById = useMemo(
     () => new Map(channels.map((channel) => [channel.id, channel.name])),
@@ -330,39 +344,52 @@ export function CreatorApp({
                   </p>
                 </header>
                 <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-8">
-                  <ProjectDraft
-                    project={selectedProject}
-                    settings={settingsByProject.get(selectedProject.id) ?? null}
-                    sourceAsset={
-                      sourceAssetByProject.get(selectedProject.id) ?? null
-                    }
-                    storageConfigured={storageConfigured}
-                    assetsReady={assetsReady}
-                    onRefresh={() => router.refresh()}
-                    channelName={
-                      selectedProject.channel_id
-                        ? (channelNameById.get(selectedProject.channel_id) ??
-                          null)
-                        : null
-                    }
-                    characterName={(() => {
-                      const characterId = settingsByProject.get(
-                        selectedProject.id,
-                      )?.character_id;
-                      return characterId
-                        ? (characterNameById.get(characterId) ?? null)
-                        : null;
-                    })()}
-                    pending={pending}
-                    onArchive={() =>
-                      runProjectAction(() =>
-                        setProjectArchived(selectedProject.id, true),
-                      )
-                    }
-                    onDelete={() =>
-                      runProjectAction(() => deleteProject(selectedProject.id))
-                    }
-                  />
+                  {selectedProject.pipeline_state !== "draft" &&
+                  selectedProject.pipeline_state !== "archived" ? (
+                    <ProjectPipeline
+                      project={selectedProject}
+                      jobs={jobsByProject.get(selectedProject.id) ?? []}
+                      onRefresh={() => router.refresh()}
+                    />
+                  ) : (
+                    <ProjectDraft
+                      project={selectedProject}
+                      settings={
+                        settingsByProject.get(selectedProject.id) ?? null
+                      }
+                      sourceAsset={
+                        sourceAssetByProject.get(selectedProject.id) ?? null
+                      }
+                      storageConfigured={storageConfigured}
+                      assetsReady={assetsReady}
+                      onRefresh={() => router.refresh()}
+                      channelName={
+                        selectedProject.channel_id
+                          ? (channelNameById.get(selectedProject.channel_id) ??
+                            null)
+                          : null
+                      }
+                      characterName={(() => {
+                        const characterId = settingsByProject.get(
+                          selectedProject.id,
+                        )?.character_id;
+                        return characterId
+                          ? (characterNameById.get(characterId) ?? null)
+                          : null;
+                      })()}
+                      pending={pending}
+                      onArchive={() =>
+                        runProjectAction(() =>
+                          setProjectArchived(selectedProject.id, true),
+                        )
+                      }
+                      onDelete={() =>
+                        runProjectAction(() =>
+                          deleteProject(selectedProject.id),
+                        )
+                      }
+                    />
+                  )}
                 </div>
               </>
             ) : (

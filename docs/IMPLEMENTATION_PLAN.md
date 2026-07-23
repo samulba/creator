@@ -172,6 +172,8 @@ Add:
 
 Decision: the job queue is Postgres-based (`processing_jobs` table, atomic claims via `for update skip locked` in privileged RPCs, leases for crash recovery). No external queue technology unless Postgres proves insufficient.
 
+Status: **Done** (migration 004). Users have no direct table access — sanitized state flows through the `public_user_jobs` view; `enqueue_job`/`retry_job` are the user RPCs, and workers (Phase 4) use `claim_next_job`/`start_job`/`heartbeat_job`/`complete_job`/`fail_job` (service_role only). Upload completion enqueues `source_validation` and moves the project to `preparing`; the workspace shows semantic stage progress with owner retry for terminal failures. Retryable failures back off exponentially (30s·2^attempt, capped at 15 min).
+
 ## 3.1 Background Job Model
 
 Create a reliable job system for long-running tasks.

@@ -298,6 +298,23 @@ export async function completeSourceUpload(input: {
     .update({ source_asset_id: asset.id })
     .eq("id", asset.project_id);
 
+  // Kick off the pipeline: enqueue source validation (idempotent) and move
+  // the project into "preparing". Tolerates a database where migration 004
+  // has not been applied yet — the project then simply stays in draft.
+  const { error: enqueueError } = await context.supabase.rpc("enqueue_job", {
+    p_project_id: asset.project_id,
+    p_job_type: "source_validation",
+    p_idempotency_key: `source-validation:${asset.id}`,
+    p_payload: { asset_id: asset.id },
+  });
+
+  if (!enqueueError) {
+    await context.supabase
+      .from("projects")
+      .update({ pipeline_state: "preparing" })
+      .eq("id", asset.project_id);
+  }
+
   revalidate();
   return { ok: true };
 }
