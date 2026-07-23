@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { StageList, type Stage } from "@/components/ui/stage-list";
 import { retryProjectJob } from "@/src/lib/actions/jobs";
 import type {
+  JobType,
   ProjectPipelineState,
   ProjectRow,
   UserJobRow,
@@ -30,23 +31,70 @@ function currentStageIndex(state: ProjectPipelineState): number {
   return semanticStages.findIndex((stage) => stage.states.includes(state));
 }
 
+/**
+ * Which job types roll up into each semantic stage (by stage index). A stage's
+ * real duration is the wall-clock span of its jobs: earliest start → latest
+ * completion. Stage 0 (upload) and the terminal stage have no processing job.
+ */
+const stageJobTypes: Partial<Record<number, JobType[]>> = {
+  1: ["source_validation", "media_probe", "proxy_generation"],
+  2: ["coarse_analysis", "candidate_detection", "deep_analysis"],
+  3: ["story_generation", "script_generation"],
+  4: ["voice_generation"],
+  5: ["edit_planning"],
+  6: ["render"],
+  7: ["quality_control"],
+};
+
+/**
+ * Real wall-clock duration of a completed stage, in ms, or null if it can't be
+ * derived yet. Never invented — only from persisted job start/finish times.
+ */
+function stageDurationMs(jobs: UserJobRow[], stageIndex: number): number | null {
+  const types = stageJobTypes[stageIndex];
+  if (!types) return null;
+  let minStart = Infinity;
+  let maxEnd = -Infinity;
+  for (const job of jobs) {
+    if (!types.includes(job.job_type)) continue;
+    if (job.status !== "succeeded" || !job.completed_at) continue;
+    const startRaw = job.started_at ?? job.created_at;
+    const start = startRaw ? Date.parse(startRaw) : NaN;
+    const end = Date.parse(job.completed_at);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (start < minStart) minStart = start;
+    if (end > maxEnd) maxEnd = end;
+  }
+  if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd) || maxEnd <= minStart) {
+    return null;
+  }
+  return maxEnd - minStart;
+}
+
 function stagesFor(
   state: ProjectPipelineState,
+  jobs: UserJobRow[],
   currentDetail: string | null,
 ): Stage[] {
   const currentIndex = currentStageIndex(state);
-  return semanticStages.map((stage, index) => ({
-    label: stage.label,
-    state:
+  return semanticStages.map((stage, index) => {
+    const stageState: Stage["state"] =
       currentIndex === -1
         ? "upcoming"
         : index < currentIndex
           ? "done"
           : index === currentIndex
             ? "current"
-            : "upcoming",
-    detail: index === currentIndex && currentDetail ? currentDetail : undefined,
-  }));
+            : "upcoming";
+    let detail: string | undefined;
+    if (stageState === "done") {
+      const ms = stageDurationMs(jobs, index);
+      detail = ms !== null ? formatElapsed(ms) : undefined;
+    } else if (stageState === "current" && currentDetail) {
+      detail = currentDetail;
+    }
+    return { label: stage.label, state: stageState, detail };
+  });
 }
 
 const jobStatusCopy: Record<UserJobRow["status"], string> = {
@@ -130,10 +178,18 @@ export function ProjectPipeline({
   const elapsed = elapsedMs !== null ? formatElapsed(elapsedMs) : null;
 
   const hint = stageHint[project.pipeline_state] ?? null;
-  const stageLabel =
-    semanticStages[currentStageIndex(project.pipeline_state)]?.label ??
-    "Processing";
+  const stageIndex = currentStageIndex(project.pipeline_state);
+  const stageLabel = semanticStages[stageIndex]?.label ?? "Processing";
   const isFailed = project.pipeline_state === "failed";
+
+  // Approximate overall progress: how many named stages are behind us. Honest
+  // (derived from real stage position), and clearly labelled as approximate.
+  const totalStages = semanticStages.length;
+  const overallPercent =
+    stageIndex >= 0
+      ? Math.round((stageIndex / (totalStages - 1)) * 100)
+      : null;
+  const stepNumber = stageIndex >= 0 ? Math.min(stageIndex + 1, totalStages) : null;
 
   const retry = async (jobId: string) => {
     setPending(true);
@@ -207,13 +263,38 @@ export function ProjectPipeline({
               ? jobStatusCopy[activeJob.status]
               : "Waiting for the next step.")}
         </p>
+
+        {/* Approximate overall progress across the named stages */}
+        {overallPercent !== null ? (
+          <div className="mt-5 max-w-md">
+            <div className="flex items-center justify-between text-[11px] font-medium tracking-wider text-ink-muted uppercase">
+              <span>Overall progress</span>
+              <span className="tabular font-mono text-ink-secondary normal-case">
+                ~{overallPercent}%
+                {stepNumber ? ` · step ${stepNumber} of ${totalStages}` : ""}
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-edge">
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-700 ease-out"
+                style={{ width: `${Math.max(overallPercent, 3)}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Live current-step card */}
       {activeJob ? (
         <div className="panel relative z-10 mt-7 overflow-hidden">
-          <div className="relative h-0.5 overflow-hidden bg-edge">
-            {isProcessing ? (
+          <div className="relative h-1 overflow-hidden bg-edge">
+            {isProcessing && activeJob.progress_percent !== null ? (
+              // A real numeric percent for this step (e.g. render clip i/N).
+              <div
+                className="h-full bg-info transition-[width] duration-700 ease-out"
+                style={{ width: `${Math.max(activeJob.progress_percent, 2)}%` }}
+              />
+            ) : isProcessing ? (
               <div className="sweep absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-info to-transparent" />
             ) : (
               <div className="h-full w-full bg-info/30" />
@@ -229,6 +310,9 @@ export function ProjectPipeline({
               </p>
               <p className="mt-1 text-xs text-ink-muted">
                 {activeJob.progress_stage ?? jobStatusCopy[activeJob.status]}
+                {activeJob.progress_percent !== null
+                  ? ` · ${activeJob.progress_percent}% of this step`
+                  : ""}
                 {activeJob.attempt_count > 1
                   ? ` · attempt ${activeJob.attempt_count}`
                   : ""}
@@ -266,7 +350,7 @@ export function ProjectPipeline({
         <p className="mb-5 text-[11px] font-medium tracking-wider text-ink-muted uppercase">
           Production timeline
         </p>
-        <StageList stages={stagesFor(project.pipeline_state, elapsed)} />
+        <StageList stages={stagesFor(project.pipeline_state, jobs, elapsed)} />
       </div>
 
       <p className="relative z-10 mt-6 flex items-center gap-2 text-xs text-ink-muted">

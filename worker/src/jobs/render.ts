@@ -51,7 +51,11 @@ function assetPrefix(objectKey: string): string {
  * render_attempt; narration is overlaid only where narration assets exist.
  */
 export const render: JobHandler = async (job, ctx) => {
-  await ctx.heartbeat({ stage: "rendering", activity: "Preparing to render" });
+  await ctx.heartbeat({
+    stage: "rendering",
+    activity: "Preparing to render",
+    percent: 0,
+  });
   await setProjectState(job.project_id, "rendering");
 
   const payload = job.payload as { edit_version_id?: string };
@@ -130,6 +134,8 @@ export const render: JobHandler = async (job, ctx) => {
       await ctx.heartbeat({
         stage: "rendering",
         activity: `Rendering clip ${i + 1}/${segments.length}`,
+        // Clip extraction is the bulk of render time → maps to 0–75%.
+        percent: Math.round((i / segments.length) * 75),
       });
       const segPath = join(workDir, `seg_${i}.mp4`);
       await extractSegment(sourceUrl, start, end, segPath, {
@@ -145,7 +151,11 @@ export const render: JobHandler = async (job, ctx) => {
     }
 
     // 2) Concatenate into the gameplay track.
-    await ctx.heartbeat({ stage: "rendering", activity: "Assembling the timeline" });
+    await ctx.heartbeat({
+      stage: "rendering",
+      activity: "Assembling the timeline",
+      percent: 80,
+    });
     const gameplayPath = join(workDir, "gameplay.mp4");
     await concatSegments(segmentPaths, gameplayPath, workDir);
     const gameplayProbe = await probe(gameplayPath);
@@ -171,13 +181,21 @@ export const render: JobHandler = async (job, ctx) => {
 
     let narrationPath: string | null = null;
     if (narrationClips.length > 0 && timelineMs > 0) {
-      await ctx.heartbeat({ stage: "rendering", activity: "Mixing narration" });
+      await ctx.heartbeat({
+        stage: "rendering",
+        activity: "Mixing narration",
+        percent: 88,
+      });
       narrationPath = join(workDir, "narration.wav");
       await buildNarrationTrack(narrationClips, timelineMs, narrationPath);
     }
 
     // 4) Final mix + encode.
-    await ctx.heartbeat({ stage: "rendering", activity: "Encoding the final video" });
+    await ctx.heartbeat({
+      stage: "rendering",
+      activity: "Encoding the final video",
+      percent: 93,
+    });
     await mixFinal(gameplayPath, narrationPath, finalPath);
 
     // Upload + validate (9.2 render validation).
