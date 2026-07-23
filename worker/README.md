@@ -5,24 +5,27 @@ polls the Postgres job queue (migration 004), claims jobs atomically, and
 processes them with FFprobe/FFmpeg. It has no inbound HTTP surface — it only
 talks to Supabase and Cloudflare R2.
 
-## What it does (Phases 4–7)
+## What it does (Phases 4–9)
 
 | Job | Work | Next |
 | --- | --- | --- |
 | `source_validation` | Confirms the uploaded object exists in R2 and matches the recorded size | → `media_probe` |
 | `media_probe` | FFprobe over a presigned URL → writes duration, resolution, frame rate, codecs onto the source asset | → `proxy_generation` |
 | `proxy_generation` | FFmpeg downscales the source to a 720p analysis proxy, uploads it to R2 as a `proxy_video` asset, advances to **understanding_gameplay** | → `coarse_analysis` |
-| `coarse_analysis` | Sends the proxy to Gemini, validates the structured result, writes `analysis_runs` + `gameplay_events` + `candidate_moments` (migration 007) | → `story_generation` |
-| `story_generation` | Gemini chooses the narrative angle + moments; writes a selected `story_versions` + `story_version_moments` (migration 008), advances to **building_story** | → `script_generation` |
+| `coarse_analysis` | Sends the proxy to Gemini, validates the structured result, writes `analysis_runs` + `gameplay_events` + `candidate_moments` (007) | → `story_generation` |
+| `story_generation` | Gemini chooses the narrative angle + moments; writes a selected `story_versions` + `story_version_moments` (008), advances to **building_story** | → `script_generation` |
 | `script_generation` | Gemini writes timestamp-aware narration; writes `script_versions` (frozen `narrator_config`) + `script_sections`; enforces `forbidden_words` | → `voice_generation` |
-| `voice_generation` | ElevenLabs narrates each section; stores `narration_audio` assets + `narration_assets` rows (migration 009), advances to **building_edit** | → `edit_planning` (Phase 8) |
+| `voice_generation` | ElevenLabs narrates each section; stores `narration_audio` assets + `narration_assets` rows (009), advances to **building_edit** | → `edit_planning` |
+| `edit_planning` | Deterministic EDL from the story beats + source ranges + `edit_style` tokens; writes `edit_versions` + `edit_segments` (010) | → `render` |
+| `render` | FFmpeg cuts the segments, concatenates, overlays ducked narration, encodes the final MP4 → `final_video` asset + `output_versions`/`render_attempts` (011), advances to **checking_quality** | → `quality_control` (Phase 10) |
 
 `coarse_analysis` / `story_generation` / `script_generation` run **only when
 `GEMINI_API_KEY` is set**; `voice_generation` runs **only when
-`ELEVENLABS_API_KEY` is set** (see below). When a key is absent the worker does
-not claim those jobs and the pipeline pauses (job stays queued) rather than
-failing. After voicing, the project waits on `edit_planning`, whose handler
-arrives in Phase 8; until then that job stays queued (expected).
+`ELEVENLABS_API_KEY` is set**. `edit_planning` and `render` are FFmpeg-only and
+**always run** (no external key). When a key is absent the worker does not claim
+the matching jobs and the pipeline pauses (job stays queued) rather than
+failing. After rendering, the project waits on `quality_control` (Phase 10);
+until then that job stays queued (expected).
 
 A deeper per-moment analysis pass (`deep_analysis`) is a planned refinement
 that can be inserted between coarse analysis and story generation later; the
@@ -71,14 +74,39 @@ of the response is re-validated and clamped to the database constraints in
 
 **Honest testing boundary.** The schema validators, persona/story/script
 prompt assembly, config hashing, forbidden-word enforcement, voice-config
-resolution, and request-body building are all covered by `npm test`
-(`src/ai/*.test.ts`, 29 cases). The live **HTTP calls** to Gemini and
-ElevenLabs cannot be exercised without real, funded keys, so they are **not**
-covered by automated tests — the request/response shapes are written to each
-vendor's documented REST contract, and the first run against real keys is the
-true integration test. Transient failures (429/5xx, timeouts) retry with the
-queue's exponential backoff; malformed, empty, or blocked responses fail with a
-clear code and are recorded on the relevant version/run row.
+resolution, request-body building, and the EDL builder are all covered by
+`npm test` (`src/ai/*.test.ts` + `src/edit/edl.test.ts`, 34 cases). The live
+**HTTP calls** to Gemini and ElevenLabs cannot be exercised without real,
+funded keys, so they are **not** covered by automated tests — the
+request/response shapes are written to each vendor's documented REST contract,
+and the first run against real keys is the true integration test. Transient
+failures (429/5xx, timeouts) retry with the queue's exponential backoff;
+malformed, empty, or blocked responses fail with a clear code and are recorded
+on the relevant version/run row.
+
+## Edit + render (Phases 8–9)
+
+`edit_planning` builds a **deterministic** Edit Decision List — no AI provider —
+so it always runs (see `src/edit/edl.ts`). It turns the selected story's ordered
+beats + their candidate source ranges + the script sections + the channel's
+enumerated `edit_style` tokens into contiguous `edit_segments`, capping per-clip
+length by the `gameplay_preservation` dial.
+
+`render` executes the EDL with FFmpeg (`src/render/ffmpeg-render.ts`): cut each
+segment from the source (input-seek + re-encode to a uniform 1080p/30fps),
+concatenate (concat demuxer, stream copy), build a narration track positioned on
+the output timeline (`adelay` + `amix`), duck the gameplay audio under narration
+(`sidechaincompress`), and encode a faststart MP4 → a `final_video` asset. It is
+then re-probed for a readable video stream, audio stream, and positive duration
+(9.2). Narration is best-effort: with no narration assets, a valid
+gameplay-only video is produced.
+
+**Deferred (documented, not faked):** basic zooms and burned-in captions are not
+implemented in the v1 render — the `edit_style` tokens for them are recorded in
+the EDL but not yet applied by FFmpeg. The render pipeline's filter graphs were
+smoke-tested locally on generated media (the exact commands the worker runs);
+the full end-to-end render on a real source needs live data and is not covered
+by automated tests.
 
 ## Job lifecycle & safety
 
@@ -113,6 +141,8 @@ All server-side secrets. **Never** expose these in the web app or a browser.
 | `WORKER_LEASE_SECONDS` | no | Job lease length (default 300) |
 | `WORKER_POLL_INTERVAL_MS` | no | Idle poll interval (default 4000) |
 | `WORKER_PROXY_HEIGHT` | no | Proxy height in px (default 720) |
+| `WORKER_RENDER_HEIGHT` | no | Final render height in px (default 1080) |
+| `WORKER_RENDER_FPS` | no | Final render frame rate (default 30) |
 | `GEMINI_FILE_TIMEOUT_MS` | no | Max wait for uploaded footage to become ACTIVE (default 300000) |
 | `GEMINI_REQUEST_TIMEOUT_MS` | no | Per-request timeout for Gemini calls (default 600000) |
 | `ELEVENLABS_REQUEST_TIMEOUT_MS` | no | Per-request timeout for voice calls (default 300000) |
@@ -193,6 +223,10 @@ Runtime **Docker** → add the environment variables → create.
 6. **With `ELEVENLABS_API_KEY` set** (migration 009 applied, and the project's
    character has a `voice_key`): `voice_generation` narrates each section →
    `narration_audio` assets in R2 + `narration_assets` rows, project →
-   *Building edit*, waiting on `edit_planning` (Phase 8). **Without the key**
-   the project stays on *Generating voice* — expected. A character with no
-   voice fails clearly with `VOICE_NOT_CONFIGURED`.
+   *Building edit*. **Without the key** the project stays on *Generating voice* —
+   expected. A character with no voice fails clearly with `VOICE_NOT_CONFIGURED`.
+7. **Edit + render (no key needed, migrations 010–011 applied):**
+   `edit_planning` writes an `edit_versions` row + `edit_segments`, then `render`
+   produces a `final_video` asset in R2 with an `output_versions` (status
+   `rendered`, `is_current`) + a succeeded `render_attempts` row. The project
+   advances to *Checking quality* and waits on `quality_control` (Phase 10).

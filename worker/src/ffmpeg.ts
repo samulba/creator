@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
  * untrusted values such as URLs and object keys cannot be interpreted as
  * shell syntax (see docs/SECURITY.md). Returns stdout on success.
  */
-function run(
+export function run(
   command: string,
   args: string[],
   options: { timeoutMs?: number; onStderr?: (line: string) => void } = {},

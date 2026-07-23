@@ -57,6 +57,8 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | `migrations/007_analysis_foundation.sql`       | **Pending** — Phase 5 analysis data model                      |
 | `migrations/008_story_and_script.sql`          | **Pending** — Phase 6 story + script data model                |
 | `migrations/009_narration_assets.sql`          | **Pending** — Phase 7 narration (voice) data model             |
+| `migrations/010_edit_engine.sql`               | **Pending** — Phase 8 edit (EDL) data model                    |
+| `migrations/011_render_engine.sql`             | **Pending** — Phase 9 render (output + attempts) data model    |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
@@ -75,6 +77,10 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 `008_story_and_script.sql` adds the `story_status`/`script_status` enums and the `story_versions`, `story_version_moments`, `script_versions`, and `script_sections` tables (Phase 6 story engine), plus `projects.selected_story_version_id` (composite FK, so the selected story must belong to the project). `script_versions.narrator_config` freezes the resolved character config at generation time (second consistency freeze point). Owner-scoped read-only RLS; worker writes via service_role.
 
 `009_narration_assets.sql` adds the `narration_assets` table (Phase 7 voice engine): voice-specific metadata linking a `script_section` to its `narration_audio` asset, with `voice_config`/`generation_metadata` frozen per narration (pinned model id, provider request id). A composite FK ties the audio asset to the same project, and a partial unique index enforces one available narration per section. Owner-scoped read-only RLS; worker writes via service_role.
+
+`010_edit_engine.sql` adds the `edit_status` enum and the `edit_versions` (inspectable Edit Decision List: jsonb EDL + summary) and `edit_segments` (normalized, one row per output segment with its source range) tables (Phase 8). The EDL is deterministic — no AI provider — and a composite FK ties each segment's source clip to the same project. Owner-scoped read-only RLS; worker writes via service_role.
+
+`011_render_engine.sql` adds the `output_version_status`, `render_status`, and `qc_status` enums and the `output_versions` (a produced story+script+edit combination; partial uniques for one current + one approved per project) and `render_attempts` (each FFmpeg run, with technical metadata) tables (Phase 9). Composite FKs tie the final/output/intermediate assets to the same project. The `qc_status` enum is reused by Phase 10. Owner-scoped read-only RLS; worker writes via service_role.
 
 ## After applying a migration
 

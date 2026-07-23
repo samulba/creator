@@ -400,62 +400,71 @@ provider supports it reliably.
 
 # Phase 8 — Edit Engine
 
-## 8.1 Edit Decision List
+Status: 8.1 and 8.2 are **done** as the `edit_planning` worker job. Data model:
+`supabase/migrations/010_edit_engine.sql` (edit_versions, edit_segments). The
+EDL builder is `worker/src/edit/edl.ts` (pure, unit-tested in `edl.test.ts`);
+the handler is `worker/src/jobs/edit-planning.ts`. **No AI provider or API key
+needed** — the plan is deterministic, so this stage always runs.
 
-Create a structured, inspectable edit plan.
+## 8.1 Edit Decision List — done
 
-Support:
+`edit_planning` assembles a deterministic EDL from the selected story's ordered
+beats, their candidate source ranges, the script sections, and the channel's
+enumerated `edit_style` tokens. Each beat becomes one gameplay segment with a
+source range and an effect summary. Writes `edit_versions` (a jsonb EDL +
+summary) and `edit_segments` (one row per output segment). The
+`gameplay_preservation` dial caps per-clip length (preserve_more = uncapped,
+balanced = 20s, cut_more_aggressively = 10s). Voiceover placement, game-audio
+levels, zoom/caption tokens are recorded; freeze frames + optional effects are
+deferred.
 
-* source ranges
-* cuts
-* voiceover placement
-* game audio levels
-* zoom instructions
-* freeze frames
-* captions
-* optional effects
+Channel consistency: the EDL reads the settings snapshot's `edit_style` and
+stores enumerated caption/zoom/transition tokens, never freeform strings.
 
-Channel consistency requirement: edit planning reads the settings snapshot's `edit_style`; the EDL uses enumerated caption/zoom/transition style tokens, not freeform strings.
+## 8.2 Timeline Builder — done
 
----
-
-## 8.2 Timeline Builder
-
-Convert the Edit Decision List into a deterministic render timeline.
-
-Creative decisions must remain separate from low-level rendering code.
+The EDL is already a deterministic timeline: segments carry contiguous
+`output_start_ms`/`output_end_ms`, and the render engine executes them without
+re-deciding anything creative. Creative intent (tokens, dials) stays in the
+plan; low-level FFmpeg lives in the render engine.
 
 ---
 
 # Phase 9 — Render Engine
 
-## 9.1 Automated Video Rendering
+Status: 9.1 and 9.2 are **done** as the `render` worker job. Data model:
+`supabase/migrations/011_render_engine.sql` (output_versions, render_attempts).
+FFmpeg building blocks: `worker/src/render/ffmpeg-render.ts`; handler:
+`worker/src/jobs/render.ts`. Runs on the worker's FFmpeg — no external API key.
 
-Use the dedicated worker and FFmpeg to create the final video.
+Honest boundary: the FFmpeg render pipeline (segment extraction, concat,
+narration positioning with audio ducking, final mix) was smoke-tested locally
+on generated media (the exact filter graphs the worker runs, including the
+`sidechaincompress` duck and `asplit` fix). The full end-to-end render against a
+real multi-GB source + real narration in R2 could not be run from the build
+environment; the first real render is the true integration test. Retries reuse
+the output version and add a new render_attempt.
 
-Initial capabilities:
+## 9.1 Automated Video Rendering — done
 
-* cuts
-* source sequencing
-* voiceover
-* gameplay audio
-* audio ducking
-* basic zooms
-* basic captions
-* final encoding
+`render` cuts each EDL segment from the source (input-seek + re-encode to a
+uniform 1080p/30fps), concatenates them (concat demuxer, stream copy), builds a
+narration track positioned on the output timeline (adelay + amix), ducks the
+gameplay audio under narration (sidechain compression), and encodes a faststart
+MP4. The result is uploaded as a `final_video` asset. Cuts, source sequencing,
+voiceover, gameplay audio, audio ducking, and final encoding are implemented;
+**basic zooms and burned-in captions are deferred** (documented in
+`worker/README.md`). Narration is best-effort: with no narration assets the
+render produces a valid gameplay-only video.
 
----
+## 9.2 Render Validation — done
 
-## 9.2 Render Validation
-
-Validate:
-
-* readable output
-* video stream
-* audio stream
-* duration
-* synchronization
-* render completion
+After render, the output is re-probed with ffprobe: the render fails unless a
+readable video stream, an audio stream, and a positive duration are present. The
+technical metadata (duration, resolution, codecs, segment/narration counts) is
+recorded on the `render_attempts` row; the `output_versions` row is marked
+`rendered` with its `final_asset_id`, and the project advances to
+*Checking quality* (Phase 10 QC, which stays queued until built).
 
 ---
 

@@ -44,6 +44,10 @@ export const env = {
   /** Proxy generation target height (analysis proxy, not final render). */
   proxyHeight: optionalInt("WORKER_PROXY_HEIGHT", 720),
 
+  /** Final render target height + frame rate. */
+  renderHeight: optionalInt("WORKER_RENDER_HEIGHT", 1080),
+  renderFps: optionalInt("WORKER_RENDER_FPS", 30),
+
   /**
    * Gemini gameplay analysis (Phase 5). Optional: when GEMINI_API_KEY is
    * absent the worker simply does not claim `coarse_analysis` jobs, so the

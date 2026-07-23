@@ -76,6 +76,12 @@ export type TargetLength = "auto" | "shorter" | "standard" | "longer";
 
 export type StoryStatus = "pending" | "generating" | "generated" | "failed";
 export type ScriptStatus = "pending" | "generating" | "generated" | "failed";
+export type EditStatus = "pending" | "planning" | "ready" | "failed";
+export type OutputVersionStatus =
+  "pending" | "rendering" | "rendered" | "failed";
+export type RenderStatus = "queued" | "running" | "succeeded" | "failed";
+export type QcStatus =
+  "not_started" | "running" | "passed" | "failed" | "skipped";
 
 export type Database = {
   public: {
@@ -402,6 +408,118 @@ export type Database = {
         >;
         Relationships: [];
       };
+      edit_versions: {
+        Row: {
+          id: string;
+          project_id: string;
+          story_version_id: string | null;
+          script_version_id: string | null;
+          creative_settings_id: string | null;
+          version_number: number;
+          status: EditStatus;
+          edl_schema_version: number;
+          timeline_duration_ms: number | null;
+          summary: string | null;
+          /** Structured, versioned edit plan (the Edit Decision List). */
+          edl: Json;
+          created_by_job_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["edit_versions"]["Row"]
+        > & { project_id: string; version_number: number };
+        Update: Partial<Database["public"]["Tables"]["edit_versions"]["Row"]>;
+        Relationships: [];
+      };
+      edit_segments: {
+        Row: {
+          id: string;
+          project_id: string;
+          edit_version_id: string;
+          segment_index: number;
+          segment_type: string;
+          output_start_ms: number;
+          output_end_ms: number;
+          source_asset_id: string | null;
+          source_start_ms: number | null;
+          source_end_ms: number | null;
+          candidate_moment_id: string | null;
+          script_section_id: string | null;
+          included: boolean;
+          effect_summary: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["edit_segments"]["Row"]
+        > & {
+          project_id: string;
+          edit_version_id: string;
+          segment_index: number;
+          segment_type: string;
+          output_start_ms: number;
+          output_end_ms: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["edit_segments"]["Row"]>;
+        Relationships: [];
+      };
+      output_versions: {
+        Row: {
+          id: string;
+          project_id: string;
+          version_number: number;
+          status: OutputVersionStatus;
+          story_version_id: string | null;
+          script_version_id: string | null;
+          edit_version_id: string | null;
+          creative_settings_id: string | null;
+          final_asset_id: string | null;
+          qc_status: QcStatus;
+          is_current: boolean;
+          is_approved: boolean;
+          approved_by: string | null;
+          approved_at: string | null;
+          change_summary: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["output_versions"]["Row"]
+        > & { project_id: string; version_number: number };
+        Update: Partial<Database["public"]["Tables"]["output_versions"]["Row"]>;
+        Relationships: [];
+      };
+      render_attempts: {
+        Row: {
+          id: string;
+          project_id: string;
+          output_version_id: string;
+          job_id: string | null;
+          attempt_number: number;
+          status: RenderStatus;
+          edit_version_id: string | null;
+          output_asset_id: string | null;
+          intermediate_asset_id: string | null;
+          technical_metadata: Json;
+          error_code: string | null;
+          error_message: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["render_attempts"]["Row"]
+        > & {
+          project_id: string;
+          output_version_id: string;
+          attempt_number: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["render_attempts"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: {
       /** Sanitized owner-scoped job state (migration 004). */
@@ -470,4 +588,12 @@ export type ScriptSectionRow =
   Database["public"]["Tables"]["script_sections"]["Row"];
 export type NarrationAssetRow =
   Database["public"]["Tables"]["narration_assets"]["Row"];
+export type EditVersionRow =
+  Database["public"]["Tables"]["edit_versions"]["Row"];
+export type EditSegmentRow =
+  Database["public"]["Tables"]["edit_segments"]["Row"];
+export type OutputVersionRow =
+  Database["public"]["Tables"]["output_versions"]["Row"];
+export type RenderAttemptRow =
+  Database["public"]["Tables"]["render_attempts"]["Row"];
 export type UserJobRow = Database["public"]["Views"]["public_user_jobs"]["Row"];

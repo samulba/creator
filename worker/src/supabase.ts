@@ -626,6 +626,212 @@ export async function insertNarrationAsset(
   if (error) throw new Error(`insert narration asset failed: ${error.message}`);
 }
 
+// --- Edit (Phase 8) -------------------------------------------------------
+
+export async function createEditVersion(
+  row: Record<string, unknown>,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("edit_versions")
+    .insert(row)
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(`create edit version failed: ${error?.message ?? "no id"}`);
+  }
+  return (data as { id: string }).id;
+}
+
+export async function insertEditSegments(
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("edit_segments").insert(rows);
+  if (error) throw new Error(`insert edit segments failed: ${error.message}`);
+}
+
+// --- Render (Phase 9) -----------------------------------------------------
+
+export type EditVersionRow = {
+  id: string;
+  story_version_id: string | null;
+  script_version_id: string | null;
+  creative_settings_id: string | null;
+  timeline_duration_ms: number | null;
+};
+
+export type EditSegmentRow = {
+  id: string;
+  segment_index: number;
+  output_start_ms: number;
+  output_end_ms: number;
+  source_start_ms: number | null;
+  source_end_ms: number | null;
+  script_section_id: string | null;
+};
+
+export async function loadEditVersion(
+  editVersionId: string,
+): Promise<EditVersionRow | null> {
+  const { data, error } = await supabase
+    .from("edit_versions")
+    .select("id, story_version_id, script_version_id, creative_settings_id, timeline_duration_ms")
+    .eq("id", editVersionId)
+    .maybeSingle();
+  if (error) throw new Error(`load edit version failed: ${error.message}`);
+  return (data as EditVersionRow | null) ?? null;
+}
+
+export async function loadLatestEditVersion(
+  projectId: string,
+): Promise<EditVersionRow | null> {
+  const { data, error } = await supabase
+    .from("edit_versions")
+    .select("id, story_version_id, script_version_id, creative_settings_id, timeline_duration_ms")
+    .eq("project_id", projectId)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`load latest edit version failed: ${error.message}`);
+  return (data as EditVersionRow | null) ?? null;
+}
+
+export async function loadEditSegments(
+  editVersionId: string,
+): Promise<EditSegmentRow[]> {
+  const { data, error } = await supabase
+    .from("edit_segments")
+    .select("id, segment_index, output_start_ms, output_end_ms, source_start_ms, source_end_ms, script_section_id")
+    .eq("edit_version_id", editVersionId)
+    .eq("included", true)
+    .order("segment_index", { ascending: true });
+  if (error) throw new Error(`load edit segments failed: ${error.message}`);
+  return (data as EditSegmentRow[] | null) ?? [];
+}
+
+/** Map of script_section_id → available narration audio object key. */
+export async function loadNarrationObjectKeys(
+  sectionIds: string[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (sectionIds.length === 0) return result;
+
+  const { data: narr, error: nErr } = await supabase
+    .from("narration_assets")
+    .select("script_section_id, asset_id")
+    .in("script_section_id", sectionIds)
+    .eq("status", "available");
+  if (nErr) throw new Error(`load narration assets failed: ${nErr.message}`);
+  const rows = (narr as { script_section_id: string; asset_id: string | null }[] | null) ?? [];
+
+  const assetToSection = new Map<string, string>();
+  for (const row of rows) {
+    if (row.asset_id) assetToSection.set(row.asset_id, row.script_section_id);
+  }
+  if (assetToSection.size === 0) return result;
+
+  const { data: assets, error: aErr } = await supabase
+    .from("assets")
+    .select("id, object_key")
+    .in("id", [...assetToSection.keys()])
+    .is("deleted_at", null);
+  if (aErr) throw new Error(`load narration objects failed: ${aErr.message}`);
+  for (const a of (assets as { id: string; object_key: string }[] | null) ?? []) {
+    const sectionId = assetToSection.get(a.id);
+    if (sectionId) result.set(sectionId, a.object_key);
+  }
+  return result;
+}
+
+export async function clearCurrentOutputVersions(
+  projectId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("output_versions")
+    .update({ is_current: false })
+    .eq("project_id", projectId)
+    .eq("is_current", true);
+  if (error) throw new Error(`clear current outputs failed: ${error.message}`);
+}
+
+export async function loadOutputVersionByEdit(
+  editVersionId: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabase
+    .from("output_versions")
+    .select("id")
+    .eq("edit_version_id", editVersionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`load output version failed: ${error.message}`);
+  return (data as { id: string } | null) ?? null;
+}
+
+export async function createOutputVersion(
+  row: Record<string, unknown>,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("output_versions")
+    .insert(row)
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(`create output version failed: ${error?.message ?? "no id"}`);
+  }
+  return (data as { id: string }).id;
+}
+
+export async function updateOutputVersion(
+  outputVersionId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("output_versions")
+    .update(patch)
+    .eq("id", outputVersionId);
+  if (error) throw new Error(`update output version failed: ${error.message}`);
+}
+
+export async function nextRenderAttemptNumber(
+  outputVersionId: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("render_attempts")
+    .select("attempt_number")
+    .eq("output_version_id", outputVersionId)
+    .order("attempt_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`next render attempt failed: ${error.message}`);
+  return ((data as { attempt_number: number } | null)?.attempt_number ?? 0) + 1;
+}
+
+export async function createRenderAttempt(
+  row: Record<string, unknown>,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("render_attempts")
+    .insert(row)
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(`create render attempt failed: ${error?.message ?? "no id"}`);
+  }
+  return (data as { id: string }).id;
+}
+
+export async function updateRenderAttempt(
+  renderAttemptId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("render_attempts")
+    .update(patch)
+    .eq("id", renderAttemptId);
+  if (error) throw new Error(`update render attempt failed: ${error.message}`);
+}
+
 /** True when the project was cancelled/deleted while a job was running. */
 export async function isProjectActive(projectId: string): Promise<boolean> {
   const { data, error } = await supabase
