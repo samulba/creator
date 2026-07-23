@@ -23,14 +23,27 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at 75% 0%, rgba(51, 111, 179, 0.18), transparent 28rem),
-    linear-gradient(180deg, #040810 0%, var(--background) 42rem);
+  background: var(--background);
   color: var(--text);
   text-rendering: optimizeLegibility;
 }
 
-body::before {
+::selection {
+  color: #ffffff;
+  background: rgba(143, 199, 255, 0.28);
+}
+
+.marketing-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  background:
+    radial-gradient(circle at 75% 0%, rgba(51, 111, 179, 0.18), transparent 28rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 24rem),
+    linear-gradient(180deg, #040810 0%, var(--background) 42rem);
+}
+
+.marketing-shell::before {
   position: fixed;
   inset: 0;
   z-index: -1;
@@ -40,16 +53,6 @@ body::before {
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 80px 80px;
   mask-image: linear-gradient(to bottom, black, transparent 70%);
-}
-
-::selection {
-  color: #ffffff;
-  background: rgba(143, 199, 255, 0.28);
-}
-
-.marketing-shell {
-  overflow: clip;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 24rem);
 }
 
 .site-header {
