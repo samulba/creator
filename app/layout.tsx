@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Creator",
-  description: "AI-powered long-form Dead by Daylight video production.",
+  title: "Creator — Video Production for Gaming Creators",
+  description: "Creator turns raw gameplay recordings into polished, story-driven long-form YouTube videos.",
 };
 
 export default function RootLayout({
