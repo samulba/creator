@@ -53,12 +53,12 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | `applied/003_assets.sql`                       | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/004_processing_jobs.sql`              | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/005_grant_authenticated_access.sql`   | **Applied** — executed successfully in the Supabase SQL Editor |
-| `migrations/006_grant_service_role_access.sql` | **Pending** — needed before the video worker can run           |
-| `migrations/007_analysis_foundation.sql`       | **Pending** — Phase 5 analysis data model                      |
-| `migrations/008_story_and_script.sql`          | **Pending** — Phase 6 story + script data model                |
-| `migrations/009_narration_assets.sql`          | **Pending** — Phase 7 narration (voice) data model             |
-| `migrations/010_edit_engine.sql`               | **Pending** — Phase 8 edit (EDL) data model                    |
-| `migrations/011_render_engine.sql`             | **Pending** — Phase 9 render (output + attempts) data model    |
+| `applied/006_grant_service_role_access.sql`    | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/007_analysis_foundation.sql`          | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/008_story_and_script.sql`             | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/009_narration_assets.sql`             | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/010_edit_engine.sql`                  | **Applied** — executed successfully in the Supabase SQL Editor |
+| `applied/011_render_engine.sql`                | **Applied** — executed successfully in the Supabase SQL Editor |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 

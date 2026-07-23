@@ -12,7 +12,7 @@ Creator is a professional AI-powered web application for turning raw Dead by Day
 - **Video worker** — a standalone Docker service in `worker/` that claims jobs and runs FFprobe/FFmpeg (source validation, media probe, proxy generation) plus the AI pipeline (Gemini **coarse analysis**, **story** and **script** generation; ElevenLabs **voice** narration) and the **edit** + **render** engines. Deploys outside Vercel; see `worker/README.md`.
 - **AI pipeline (Phases 5–7)** — `coarse_analysis` records grounded gameplay events + candidate moments (migration 007); `story_generation` picks the narrative angle (008); `script_generation` writes timestamp-aware narration in the character's voice, freezing the resolved character config; `voice_generation` narrates each section with ElevenLabs (009). All output is schema-validated; the Gemini steps run only with a `GEMINI_API_KEY` and the voice step only with an `ELEVENLABS_API_KEY` — without a key the pipeline pauses at the matching stage. Provider boundaries live in `worker/src/ai/`.
 - **Edit + render (Phases 8–9)** — `edit_planning` builds a deterministic, inspectable Edit Decision List from the story beats + `edit_style` tokens (migration 010, no API key); `render` cuts and concatenates the selected moments with FFmpeg, overlays ducked narration, and encodes the final MP4 as a `final_video` asset (migration 011), then validates it. Basic zooms + burned-in captions are deferred (see `worker/README.md`).
-- **Database** — migrations 001–005 applied; 006–011 pending. See `supabase/README.md`.
+- **Database** — migrations 001–011 applied. See `supabase/README.md`.
 - **Not built yet** — QC, product experience, hardening: Phases 10–12.
 
 ## Structure
