@@ -59,6 +59,44 @@ export type AssetRow = {
   metadata: Record<string, unknown>;
 };
 
+/** Active creative settings snapshot for a project (migration 002). */
+export type CreativeSettingsRow = {
+  id: string;
+  project_id: string;
+  version_number: number;
+  creative_direction: string;
+  pacing: string;
+  narration_density: string;
+  gameplay_preservation: string;
+  target_length: string;
+  character_id: string | null;
+  edit_style: Record<string, unknown>;
+  is_active: boolean;
+};
+
+/** A reusable narrator identity (migration 002). No secrets — voice_key is an ID. */
+export type CharacterRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  language: string;
+  voice_provider: string;
+  voice_key: string | null;
+  voice_settings: Record<string, unknown>;
+  speech_style: Record<string, unknown>;
+};
+
+/** Minimal project fields the analysis step reads. */
+export type ProjectRow = {
+  id: string;
+  title: string;
+  target_language: string;
+  channel_id: string | null;
+  source_asset_id: string | null;
+  pipeline_state: string;
+  deleted_at: string | null;
+};
+
 /** Error thrown by a job handler to control retry behavior. */
 export class JobError extends Error {
   code: string;

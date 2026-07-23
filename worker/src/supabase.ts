@@ -1,7 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { env } from "./env.js";
-import type { AssetRow, ProcessingJob } from "./types.js";
+import type {
+  AssetRow,
+  CharacterRow,
+  CreativeSettingsRow,
+  ProcessingJob,
+  ProjectRow,
+} from "./types.js";
 
 /**
  * Service-role Supabase client. Bypasses RLS — used only inside this
@@ -173,6 +179,151 @@ export async function insertAsset(
     throw new Error(`insert asset failed: ${error?.message ?? "no id"}`);
   }
   return (data as { id: string }).id;
+}
+
+export async function loadProject(projectId: string): Promise<ProjectRow | null> {
+  const { data, error } = await supabase
+    .from("projects")
+    .select(
+      "id, title, target_language, channel_id, source_asset_id, pipeline_state, deleted_at",
+    )
+    .eq("id", projectId)
+    .maybeSingle();
+  if (error) throw new Error(`load project failed: ${error.message}`);
+  return (data as ProjectRow | null) ?? null;
+}
+
+/** The project's active creative settings snapshot (the frozen v1 dials). */
+export async function loadActiveCreativeSettings(
+  projectId: string,
+): Promise<CreativeSettingsRow | null> {
+  const { data, error } = await supabase
+    .from("project_creative_settings")
+    .select(
+      "id, project_id, version_number, creative_direction, pacing, narration_density, gameplay_preservation, target_length, character_id, edit_style, is_active",
+    )
+    .eq("project_id", projectId)
+    .eq("is_active", true)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`load creative settings failed: ${error.message}`);
+  return (data as CreativeSettingsRow | null) ?? null;
+}
+
+export async function loadCharacter(
+  characterId: string,
+): Promise<CharacterRow | null> {
+  const { data, error } = await supabase
+    .from("characters")
+    .select(
+      "id, user_id, name, language, voice_provider, voice_key, voice_settings, speech_style",
+    )
+    .eq("id", characterId)
+    .maybeSingle();
+  if (error) throw new Error(`load character failed: ${error.message}`);
+  return (data as CharacterRow | null) ?? null;
+}
+
+/**
+ * The analysis proxy for a project. Prefers a specific asset id (from the job
+ * payload) and falls back to the most recent available proxy_video.
+ */
+export async function loadProxyAsset(
+  projectId: string,
+  proxyAssetId?: string | null,
+): Promise<AssetRow | null> {
+  if (proxyAssetId) {
+    const { data, error } = await supabase
+      .from("assets")
+      .select("*")
+      .eq("id", proxyAssetId)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (error) throw new Error(`load proxy asset failed: ${error.message}`);
+    if (data) return data as AssetRow;
+  }
+
+  const { data, error } = await supabase
+    .from("assets")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("asset_type", "proxy_video")
+    .eq("status", "available")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`load proxy asset failed: ${error.message}`);
+  return (data as AssetRow | null) ?? null;
+}
+
+export async function createAnalysisRun(row: {
+  projectId: string;
+  runType: string;
+  sourceAssetId: string | null;
+  proxyAssetId: string | null;
+  modelMetadata: Record<string, unknown>;
+}): Promise<string> {
+  const { data, error } = await supabase
+    .from("analysis_runs")
+    .insert({
+      project_id: row.projectId,
+      run_type: row.runType,
+      status: "running",
+      source_asset_id: row.sourceAssetId,
+      proxy_asset_id: row.proxyAssetId,
+      model_metadata: row.modelMetadata,
+      started_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(`create analysis run failed: ${error?.message ?? "no id"}`);
+  }
+  return (data as { id: string }).id;
+}
+
+export async function updateAnalysisRun(
+  runId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("analysis_runs")
+    .update(patch)
+    .eq("id", runId);
+  if (error) throw new Error(`update analysis run failed: ${error.message}`);
+}
+
+export async function insertGameplayEvents(
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("gameplay_events").insert(rows);
+  if (error) throw new Error(`insert gameplay events failed: ${error.message}`);
+}
+
+export async function insertCandidateMoments(
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("candidate_moments").insert(rows);
+  if (error) {
+    throw new Error(`insert candidate moments failed: ${error.message}`);
+  }
+}
+
+export async function insertCandidateMomentEvents(
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase
+    .from("candidate_moment_events")
+    .insert(rows);
+  if (error) {
+    throw new Error(`insert candidate moment events failed: ${error.message}`);
+  }
 }
 
 /** True when the project was cancelled/deleted while a job was running. */

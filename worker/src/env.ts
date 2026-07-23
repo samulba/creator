@@ -43,4 +43,22 @@ export const env = {
 
   /** Proxy generation target height (analysis proxy, not final render). */
   proxyHeight: optionalInt("WORKER_PROXY_HEIGHT", 720),
+
+  /**
+   * Gemini gameplay analysis (Phase 5). Optional: when GEMINI_API_KEY is
+   * absent the worker simply does not claim `coarse_analysis` jobs, so the
+   * pipeline pauses at "understanding_gameplay" instead of failing. The key
+   * is a server-side secret — it lives only in the worker environment.
+   */
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+    /** Max wall-clock to wait for an uploaded file to become ACTIVE. */
+    fileActiveTimeoutMs: optionalInt("GEMINI_FILE_TIMEOUT_MS", 5 * 60_000),
+    /** Max wall-clock for a single generateContent call. */
+    requestTimeoutMs: optionalInt("GEMINI_REQUEST_TIMEOUT_MS", 10 * 60_000),
+  },
 } as const;
+
+/** True when Gemini analysis is configured and coarse_analysis can run. */
+export const geminiConfigured = env.gemini.apiKey !== null;

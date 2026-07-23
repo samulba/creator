@@ -212,7 +212,7 @@ the queue via `claim_next_job`, runs FFprobe over presigned URLs, generates a
 downscaled proxy with FFmpeg, and advances the pipeline through the
 *Preparing footage* stage into *Understanding gameplay*. Job chain:
 `source_validation → media_probe → proxy_generation → coarse_analysis`
-(the last stays queued until Phase 5). FFprobe/FFmpeg parsing and proxy
+(`coarse_analysis` is handled from Phase 5). FFprobe/FFmpeg parsing and proxy
 transcoding are verified locally against generated media; deployment +
 service-role/R2 secrets are documented in `worker/README.md` and set up by
 the operator. No new migration was required — migrations 003/004 already
@@ -269,40 +269,55 @@ Requirements:
 
 # Phase 5 — AI Video Intelligence
 
-## 5.1 AI Provider Abstraction
+Status: 5.1, 5.2, and 5.3 are **done** as the `coarse_analysis` worker job;
+5.4 (deep analysis) is scoped but not implemented. Data model:
+`supabase/migrations/007_analysis_foundation.sql` (analysis_runs,
+gameplay_events, candidate_moments, candidate_moment_events). Provider code:
+`worker/src/ai/` behind an `AnalysisProvider` interface; the job handler is
+`worker/src/jobs/coarse-analysis.ts`.
 
-Create internal provider interfaces before integrating AI deeply.
+Honest boundary: the schema validation, persona/prompt assembly, config
+hashing, and DB mapping are unit-tested (`worker/src/ai/schema.test.ts`, run
+with `npm test` in `worker/`). The live Gemini HTTP calls require a real,
+funded `GEMINI_API_KEY` and could not be end-to-end tested from the build
+environment — they are written to Google's documented REST contract, and the
+first run against a real key is the true integration test. Without the key the
+worker does not claim `coarse_analysis` jobs, so the pipeline pauses at
+*Understanding gameplay* rather than failing. Migrations 006 + 007 must be
+applied before a worker with a key runs.
 
-Avoid spreading provider-specific code across the application.
+## 5.1 AI Provider Abstraction — done
 
----
+`worker/src/ai/types.ts` defines the `AnalysisProvider` interface;
+`worker/src/ai/index.ts` is a factory returning `null` when no provider is
+configured. Provider-specific code (Gemini) stays behind the boundary in
+`worker/src/ai/gemini.ts`, so another model/vendor can be added without
+touching the handler.
 
-## 5.2 Gemini Video Analysis
+## 5.2 Gemini Video Analysis — done
 
-Add initial gameplay analysis.
+`coarse_analysis` uploads the analysis proxy to the Gemini File API and calls
+`generateContent` with a strict `responseSchema` (structured output). Detects
+match context, gameplay events (typed, ms-timestamped, confidence +
+importance), and candidate moments. Every field is re-validated and clamped to
+the DB constraints in `worker/src/ai/schema.ts` — provider output is data, not
+instructions. The prompt is grounded (report only what is on screen; never
+fabricate); the character persona + creative dials bias selection and framing,
+not the facts. Each run stamps model id, prompt template version, and the
+`character_config_hash` for per-channel consistency provenance.
 
-Output must be structured and schema-validated.
+## 5.3 Candidate Moment Detection — done (in the coarse pass)
 
-Detect:
+The coarse pass produces `candidate_moments` directly, each citing the
+`gameplay_events` that support it (via `candidate_moment_events`). Moments
+carry an importance score and a selection reason and default to the
+`candidate` inclusion state; users can later exclude/restore them.
 
-* match structure
-* major events
-* potential highlights
-* candidate time ranges
+## 5.4 Deep Analysis — scoped, not implemented
 
----
-
-## 5.3 Candidate Moment Detection
-
-Score and select relevant gameplay moments for deeper analysis.
-
----
-
-## 5.4 Deep Analysis
-
-Perform more detailed analysis on selected moments.
-
-Generate structured event data suitable for story generation.
+After a coarse pass the worker enqueues `deep_analysis` (currently unhandled →
+stays queued). It will perform a more detailed pass over the strongest
+candidates and produce structured event data suitable for story generation.
 
 ---
 
