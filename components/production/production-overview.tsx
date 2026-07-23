@@ -1,4 +1,12 @@
-const stages = ["Gameplay uploaded", "Gameplay understood", "Key moments selected", "Story built", "Narration generated", "Edit assembled", "Final render ready"];
+const stages = [
+  "Gameplay uploaded",
+  "Gameplay understood",
+  "Key moments selected",
+  "Story built",
+  "Narration generated",
+  "Edit assembled",
+  "Final render ready",
+];
 
 export function ProductionOverview() {
   return (
@@ -13,8 +21,9 @@ export function ProductionOverview() {
             </div>
           </div>
         </div>
+
         <div className="mt-6 rounded-xl border border-white/8 bg-white/[0.025] p-5">
-          <h3 className="font-semibold">Production flow</h3>
+          <h3 className="font-semibold">How this video was shaped</h3>
           <div className="mt-5 space-y-3">
             {stages.map((stage) => (
               <div key={stage} className="flex items-center gap-3 text-sm">
@@ -25,9 +34,13 @@ export function ProductionOverview() {
           </div>
         </div>
       </div>
+
       <aside className="space-y-3">
         <Info label="Final duration" value="10:42" />
-        <Info label="Story" value="A Ghost Face sacrifices the entire match just to chase the player." />
+        <Info
+          label="Story"
+          value="A Ghost Face sacrifices the entire match just to chase the player."
+        />
         <Info label="Narrator" value="Calm documentary" />
         <Info label="Status" value="Ready" />
       </aside>
@@ -36,5 +49,10 @@ export function ProductionOverview() {
 }
 
 function Info({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4"><p className="text-xs text-stone-500">{label}</p><p className="mt-2 text-sm text-stone-100">{value}</p></div>;
+  return (
+    <div className="rounded-lg border border-white/8 bg-white/[0.025] p-4">
+      <p className="text-xs text-stone-500">{label}</p>
+      <p className="mt-2 text-sm text-stone-100">{value}</p>
+    </div>
+  );
 }
