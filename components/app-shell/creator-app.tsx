@@ -60,7 +60,11 @@ type ReadyTab = (typeof readyTabs)[number];
 
 const navigationItems = ["Projects", "New Video", "Settings"] as const;
 
-export function CreatorApp() {
+type CreatorAppProps = {
+  userEmail: string;
+};
+
+export function CreatorApp({ userEmail }: CreatorAppProps) {
   const [selectedProjectId, setSelectedProjectId] = useState("ghost-face");
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<ReadyTab>("Overview");
@@ -83,6 +87,7 @@ export function CreatorApp() {
             <div>
               <div className="text-xl font-semibold tracking-tight">Creator</div>
               <p className="mt-1 text-xs text-stone-500">Video production</p>
+              <p className="mt-3 max-w-44 truncate text-xs text-stone-600">{userEmail}</p>
             </div>
             <button
               className="rounded-md bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-300 lg:hidden"
@@ -107,6 +112,14 @@ export function CreatorApp() {
               </button>
             ))}
           </nav>
+          <form className="mt-8 hidden lg:block" action="/auth/signout" method="post">
+            <button
+              type="submit"
+              className="w-full rounded-md border border-white/8 px-3 py-2 text-left text-sm text-stone-500 transition hover:border-white/15 hover:bg-white/[0.04] hover:text-stone-200"
+            >
+              Log out
+            </button>
+          </form>
         </aside>
 
         <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
