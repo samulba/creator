@@ -62,6 +62,7 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 | `applied/012_project_deletion_rpc.sql`       | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/013_pipeline_reliability.sql`       | **Applied** — executed successfully in the Supabase SQL Editor |
 | `applied/014_fewer_failures.sql`             | **Applied** — executed successfully in the Supabase SQL Editor |
+| `migrations/015_output_approval.sql`         | **Pending** — run in the Supabase SQL Editor                   |
 
 `001_supabase_foundation.sql` created the `profiles`, `projects`, and `project_creative_settings` tables, the `project_pipeline_state` enum, `updated_at` triggers, the automatic profile-creation trigger on `auth.users`, and enabled RLS with owner-scoped policies on all three tables.
 
@@ -86,6 +87,8 @@ Numbers define execution order. Never reuse a number. Apply migrations strictly 
 `011_render_engine.sql` adds the `output_version_status`, `render_status`, and `qc_status` enums and the `output_versions` (a produced story+script+edit combination; partial uniques for one current + one approved per project) and `render_attempts` (each FFmpeg run, with technical metadata) tables (Phase 9). Composite FKs tie the final/output/intermediate assets to the same project. The `qc_status` enum is reused by Phase 10. Owner-scoped read-only RLS; worker writes via service_role.
 
 `013_pipeline_reliability.sql` adds `projects.pre_archive_state` (so un-archiving restores the pipeline state instead of resetting to draft) and rebuilds `claim_next_job` with a reaper that settles jobs whose lease expired with no attempts left as failed (previously they were stuck in `running` forever and the project froze mid-stage).
+
+`015_output_approval.sql` adds the `approve_current_output(uuid)` SECURITY DEFINER function: users approve their current, QC-passed output version (single approved version per project) and the project moves to `approved`. output_versions stays read-only for users otherwise. Granted to `authenticated`.
 
 `014_fewer_failures.sql` makes the pipeline self-healing so the failure
 screen almost never appears: the per-job attempt budget rises from 3 to 6

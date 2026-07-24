@@ -565,6 +565,10 @@ export type Database = {
         Args: { p_project_id: string };
         Returns: boolean;
       };
+      approve_current_output: {
+        Args: { p_project_id: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       project_pipeline_state: ProjectPipelineState;

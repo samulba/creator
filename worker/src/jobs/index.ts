@@ -9,6 +9,7 @@ import { sourceValidation } from "./source-validation.js";
 import { storyGeneration } from "./story-generation.js";
 import { mediaProbe } from "./media-probe.js";
 import { proxyGeneration } from "./proxy-generation.js";
+import { qualityControl } from "./quality-control.js";
 import { voiceGeneration } from "./voice-generation.js";
 
 export type JobContext = {
@@ -29,7 +30,7 @@ export type JobHandler = (
  * are always available (FFmpeg only, no external key). The Gemini jobs are
  * registered only when GEMINI_API_KEY is set; voice only when ELEVENLABS_API_KEY
  * is set — otherwise those jobs stay queued and the pipeline pauses at the
- * matching stage rather than failing. Quality control arrives in Phase 10.
+ * matching stage rather than failing.
  */
 export const handlers: Partial<Record<ProcessingJob["job_type"], JobHandler>> = {
   source_validation: sourceValidation,
@@ -37,6 +38,7 @@ export const handlers: Partial<Record<ProcessingJob["job_type"], JobHandler>> = 
   proxy_generation: proxyGeneration,
   edit_planning: editPlanning,
   render: render,
+  quality_control: qualityControl,
   ...(geminiConfigured
     ? {
         coarse_analysis: coarseAnalysis,

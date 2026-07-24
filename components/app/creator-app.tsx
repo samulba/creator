@@ -23,6 +23,7 @@ import { demoProjects, statusTone } from "./demo-data";
 import { NewVideoDialog } from "./new-video-dialog";
 import { ProjectDraft } from "./project-draft";
 import { ProjectPipeline } from "./project-pipeline";
+import { ProjectReview } from "./project-review";
 import { ProjectFailed } from "./project-failed";
 import {
   ProjectProgress,
@@ -462,8 +463,15 @@ export function CreatorApp({
                   </div>
                 </header>
                 <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-8">
-                  {selectedProject.pipeline_state !== "draft" &&
-                  selectedProject.pipeline_state !== "archived" ? (
+                  {selectedProject.pipeline_state === "ready_for_review" ||
+                  selectedProject.pipeline_state === "approved" ? (
+                    <ProjectReview
+                      key={selectedProject.id}
+                      project={selectedProject}
+                      onRefresh={() => router.refresh()}
+                    />
+                  ) : selectedProject.pipeline_state !== "draft" &&
+                    selectedProject.pipeline_state !== "archived" ? (
                     <ProjectPipeline
                       key={selectedProject.id}
                       project={selectedProject}

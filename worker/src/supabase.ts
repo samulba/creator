@@ -811,6 +811,46 @@ export async function updateOutputVersion(
   if (error) throw new Error(`update output version failed: ${error.message}`);
 }
 
+export type OutputVersionRow = {
+  id: string;
+  project_id: string;
+  status: string;
+  qc_status: string;
+  final_asset_id: string | null;
+  edit_version_id: string | null;
+  script_version_id: string | null;
+  is_current: boolean;
+};
+
+export async function loadOutputVersion(
+  outputVersionId: string,
+): Promise<OutputVersionRow | null> {
+  const { data, error } = await supabase
+    .from("output_versions")
+    .select(
+      "id, project_id, status, qc_status, final_asset_id, edit_version_id, script_version_id, is_current",
+    )
+    .eq("id", outputVersionId)
+    .maybeSingle();
+  if (error) throw new Error(`load output version failed: ${error.message}`);
+  return (data as OutputVersionRow | null) ?? null;
+}
+
+export async function loadAssetById(
+  assetId: string,
+  projectId: string,
+): Promise<AssetRow | null> {
+  const { data, error } = await supabase
+    .from("assets")
+    .select("*")
+    .eq("id", assetId)
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(`load asset failed: ${error.message}`);
+  return (data as AssetRow | null) ?? null;
+}
+
 export async function nextRenderAttemptNumber(
   outputVersionId: string,
 ): Promise<number> {
