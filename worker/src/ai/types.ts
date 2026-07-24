@@ -140,6 +140,8 @@ export type ScriptBeat = {
   endMs: number;
   title: string | null;
   summary: string | null;
+  /** Spoken-word budget so the line fits before the next beat starts. */
+  maxWords?: number;
 };
 
 export type ScriptGenerationInput = {

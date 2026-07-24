@@ -4,6 +4,7 @@ import {
   enqueuePipelineJob,
   insertEditSegments,
   loadActiveCreativeSettings,
+  loadCandidateMoments,
   loadLatestScriptVersion,
   loadOriginalSource,
   loadScriptVersion,
@@ -67,8 +68,18 @@ export const editPlanning: JobHandler = async (job, ctx) => {
     sourceEndMs: b.moment.end_ms,
   }));
 
+  // Coverage-first: the timeline is the whole match; ALL analysed moments
+  // are kept (not just the story selection), and only long eventless
+  // stretches get compressed. Requires the probed source duration.
+  const allMoments = await loadCandidateMoments(job.project_id);
+
   const result = buildEdl({
     sourceAssetId: source?.id ?? null,
+    sourceDurationMs: source?.duration_ms ?? null,
+    keepRanges: allMoments.map((m) => ({
+      startMs: m.start_ms,
+      endMs: m.end_ms,
+    })),
     editStyle: (settings?.edit_style ?? {}) as Record<string, unknown>,
     gameplayPreservation: settings?.gameplay_preservation ?? "balanced",
     beats,

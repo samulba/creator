@@ -90,6 +90,17 @@ export const scriptGeneration: JobHandler = async (job, ctx) => {
     summary: b.moment.summary,
   }));
 
+  // Per-beat spoken-word budget: the room a line has is the CHRONOLOGICAL
+  // gap to the next narrated moment (the edit keeps the match in order), at
+  // a spoken pace of ~2.3 words/second, capped so no line becomes a lecture.
+  const chronological = [...beats].sort((a, b) => a.startMs - b.startMs);
+  for (let i = 0; i < chronological.length; i += 1) {
+    const beat = chronological[i]!;
+    const nextStart = chronological[i + 1]?.startMs ?? beat.endMs + 15_000;
+    const windowMs = Math.min(15_000, Math.max(3_500, nextStart - beat.startMs));
+    beat.maxWords = Math.max(8, Math.round((windowMs / 1000) * 2.3));
+  }
+
   let result;
   try {
     result = await provider.generateScript(

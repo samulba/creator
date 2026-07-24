@@ -370,7 +370,11 @@ export const render: JobHandler = async (job, ctx) => {
       .map((s) => s.script_section_id)
       .filter((id): id is string => id !== null);
     const narrationKeys = await loadNarrationObjectKeys(sectionIds);
-    const narrationClips: Array<{ url: string; delayMs: number }> = [];
+    const narrationClips: Array<{
+      url: string;
+      delayMs: number;
+      maxDurationMs?: number;
+    }> = [];
     for (const seg of segments) {
       if (!seg.script_section_id) continue;
       const objectKey = narrationKeys.get(seg.script_section_id);
@@ -379,6 +383,15 @@ export const render: JobHandler = async (job, ctx) => {
         url: await presignGet(objectKey),
         delayMs: seg.output_start_ms,
       });
+    }
+
+    // Cap every narration clip at the gap to the next one (minus a small
+    // breath) so two lines can never speak over each other.
+    narrationClips.sort((a, b) => a.delayMs - b.delayMs);
+    for (let i = 0; i < narrationClips.length; i += 1) {
+      const clip = narrationClips[i]!;
+      const nextStart = narrationClips[i + 1]?.delayMs ?? timelineMs;
+      clip.maxDurationMs = Math.max(1_000, nextStart - clip.delayMs - 350);
     }
 
     let narrationPath: string | null = null;

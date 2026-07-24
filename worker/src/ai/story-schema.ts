@@ -13,8 +13,8 @@ import type {
   StorySelection,
 } from "./types.js";
 
-export const STORY_PROMPT_VERSION = "story-v1";
-export const SCRIPT_PROMPT_VERSION = "script-v1";
+export const STORY_PROMPT_VERSION = "story-v2";
+export const SCRIPT_PROMPT_VERSION = "script-v2";
 
 const TITLE_MAX = 300;
 const ANGLE_MAX = 800;

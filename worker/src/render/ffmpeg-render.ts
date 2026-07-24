@@ -135,7 +135,7 @@ export async function concatSegments(
  * reads them directly).
  */
 export async function buildNarrationTrack(
-  clips: Array<{ url: string; delayMs: number }>,
+  clips: Array<{ url: string; delayMs: number; maxDurationMs?: number }>,
   timelineMs: number,
   outputPath: string,
 ): Promise<void> {
@@ -146,8 +146,15 @@ export async function buildNarrationTrack(
 
   const parts = clips.map((clip, i) => {
     const delay = Math.max(0, Math.round(clip.delayMs));
+    // Never let one narration bleed into the next: atrim caps the clip to
+    // its slot (a no-op when the audio is already shorter). Two voices
+    // speaking over each other is worse than a slightly clipped line.
+    const trim =
+      clip.maxDurationMs && clip.maxDurationMs > 0
+        ? `,atrim=0:${msToSeconds(clip.maxDurationMs)}`
+        : "";
     // Resample to a common format, force stereo, then delay to position.
-    return `[${i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=${delay}|${delay}[a${i}]`;
+    return `[${i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo${trim},adelay=${delay}|${delay}[a${i}]`;
   });
   const mixInputs = clips.map((_, i) => `[a${i}]`).join("");
   const timelineSeconds = msToSeconds(timelineMs);
