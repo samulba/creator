@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, statfs } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 
@@ -27,6 +27,7 @@ import {
   loadNarrationObjectKeys,
   loadOriginalSource,
   loadOutputVersionByEdit,
+  loadProxyAsset,
   nextRenderAttemptNumber,
   nextVersionNumber,
   setProjectState,
@@ -123,114 +124,205 @@ export const render: JobHandler = async (job, ctx) => {
   const finalPath = join(workDir, "final.mp4");
 
   try {
-    // 0) Fetch the source ONCE to local disk. Cutting every clip by seeking
-    // into a presigned URL over HTTP was slow and flaky for long recordings
-    // (the seek can force reading the file from the start — clip 1 then hits
-    // the timeout, forever). Local cuts are fast and deterministic. If the
-    // download fails (e.g. not enough disk), fall back to URL streaming with
-    // a long-lived signature rather than failing the render outright.
+    // How long ffmpeg may stay completely silent before we assume stuck I/O
+    // and kill it. Working ffmpeg prints progress about once a second, so
+    // this converts an invisible 20-minute hang into a fast, labelled error.
+    const STALL_MS = 4 * 60_000;
+
+    const downloadSource = async (
+      objectKey: string,
+      destName: string,
+      basePercent: number,
+    ): Promise<string> => {
+      const destPath = join(workDir, destName);
+      let lastBeat = 0;
+      await downloadToFile(objectKey, destPath, {
+        onProgress: (downloaded, total) => {
+          const now = Date.now();
+          if (now - lastBeat < 10_000) return;
+          lastBeat = now;
+          void ctx
+            .heartbeat({
+              stage: "rendering",
+              activity: "Downloading the recording",
+              percent: total
+                ? Math.min(
+                    14,
+                    basePercent +
+                      Math.floor((downloaded / total) * (14 - basePercent)),
+                  )
+                : basePercent,
+            })
+            .catch(() => {});
+        },
+      });
+      return destPath;
+    };
+
+    // Cuts every segment from one local file. Throws a JobError with a
+    // RENDER_CLIP_* code when ffmpeg times out or stops making progress,
+    // so the caller can decide to switch sources instead of looping.
+    const cutAllSegments = async (
+      inputPath: string,
+      height: number,
+    ): Promise<string[]> => {
+      const paths: string[] = [];
+      for (let i = 0; i < segments.length; i += 1) {
+        const seg = segments[i]!;
+        const start = seg.source_start_ms;
+        const end = seg.source_end_ms;
+        if (start === null || end === null || end <= start) continue;
+        const clipDurationMs = end - start;
+        // Clip extraction is the bulk of render time → band 15–70%.
+        const clipBase = 15 + (i / segments.length) * 55;
+        const clipSpan = 55 / segments.length;
+        await ctx.heartbeat({
+          stage: "rendering",
+          activity: `Rendering clip ${i + 1}/${segments.length}`,
+          percent: Math.round(clipBase),
+        });
+        const segPath = join(workDir, `seg_${i}.mp4`);
+        let lastClipBeat = 0;
+        try {
+          await extractSegment(inputPath, start, end, segPath, {
+            height,
+            fps: env.renderFps,
+            timeoutMs: scaledTimeoutMs(clipDurationMs),
+            stallTimeoutMs: STALL_MS,
+            onProgress: (line) => {
+              const doneMs = parseFfmpegTimeMs(line);
+              if (doneMs === null) return;
+              const now = Date.now();
+              if (now - lastClipBeat < 10_000) return;
+              lastClipBeat = now;
+              void ctx
+                .heartbeat({
+                  stage: "rendering",
+                  activity: `Rendering clip ${i + 1}/${segments.length}`,
+                  percent: Math.round(
+                    clipBase + Math.min(1, doneMs / clipDurationMs) * clipSpan,
+                  ),
+                })
+                .catch(() => {});
+            },
+          });
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            (error.message.includes("timed out") ||
+              error.message.includes("stalled"))
+          ) {
+            throw new JobError(
+              error.message.includes("stalled")
+                ? "RENDER_CLIP_STALLED"
+                : "RENDER_CLIP_TIMEOUT",
+              `Cutting clip ${i + 1} of ${segments.length} stopped making progress.`,
+              {
+                retryable: true,
+                details: { clip_duration_ms: clipDurationMs },
+              },
+            );
+          }
+          throw error;
+        }
+        paths.push(segPath);
+      }
+      return paths;
+    };
+
+    // ── Choose the cut source ──────────────────────────────────────────
+    // Preferred: the ORIGINAL recording, downloaded once and cut locally
+    // (per-clip seeking into a presigned URL stalls on long recordings).
+    // If the original cannot be used on this machine — too big for the
+    // disk, download failure, or ffmpeg stalling on it — fall back to the
+    // ANALYSIS PROXY: same timeline, much smaller, always cuttable. A
+    // finished 720p video beats a 1080p render that never completes; the
+    // fallback is recorded in the render attempt and asset metadata.
     await ctx.heartbeat({
       stage: "rendering",
       activity: "Downloading the recording",
       percent: 1,
     });
-    let sourceInput: string;
-    try {
-      const localSource = join(
-        workDir,
-        `source${extname(source.object_key) || ".mp4"}`,
-      );
-      let lastDownloadBeat = 0;
-      await downloadToFile(source.object_key, localSource, {
-        onProgress: (downloaded, total) => {
-          const now = Date.now();
-          if (now - lastDownloadBeat < 10_000) return;
-          lastDownloadBeat = now;
-          const size = total ?? source.byte_size;
-          void ctx
-            .heartbeat({
-              stage: "rendering",
-              activity: "Downloading the recording",
-              percent: size
-                ? Math.min(14, 1 + Math.floor((downloaded / size) * 13))
-                : 1,
-            })
-            .catch(() => {});
-        },
-      });
-      sourceInput = localSource;
-    } catch (downloadError) {
-      logger.warn("source download failed; falling back to URL streaming", {
-        job_id: job.id,
-        reason:
-          downloadError instanceof Error ? downloadError.message : "unknown",
-      });
-      sourceInput = await presignGet(source.object_key, 12 * 3600);
+    let renderSource: "original" | "proxy" = "original";
+    let originalPath: string | null = null;
+
+    if (source.byte_size !== null) {
+      // Source + normalized segments + concat + final ≈ 2× source, + slack.
+      const stats = await statfs(workDir);
+      const freeBytes = stats.bavail * stats.bsize;
+      if (freeBytes < source.byte_size * 2 + 1_000_000_000) {
+        renderSource = "proxy";
+        logger.warn("original too large for worker disk; rendering from proxy", {
+          job_id: job.id,
+          source_bytes: source.byte_size,
+          free_bytes: freeBytes,
+        });
+      }
     }
 
-    // 1) Cut + normalize each segment. The timeout scales with the clip's
-    // duration, and ffmpeg's own progress feeds honest within-clip percent.
-    const segmentPaths: string[] = [];
-    for (let i = 0; i < segments.length; i += 1) {
-      const seg = segments[i]!;
-      const start = seg.source_start_ms;
-      const end = seg.source_end_ms;
-      if (start === null || end === null || end <= start) continue;
-      const clipDurationMs = end - start;
-      // Clip extraction is the bulk of render time → band 15–70%.
-      const clipBase = 15 + (i / segments.length) * 55;
-      const clipSpan = 55 / segments.length;
-      await ctx.heartbeat({
-        stage: "rendering",
-        activity: `Rendering clip ${i + 1}/${segments.length}`,
-        percent: Math.round(clipBase),
-      });
-      const segPath = join(workDir, `seg_${i}.mp4`);
-      let lastClipBeat = 0;
+    if (renderSource === "original") {
       try {
-        await extractSegment(sourceInput, start, end, segPath, {
-          height: env.renderHeight,
-          fps: env.renderFps,
-          timeoutMs: scaledTimeoutMs(clipDurationMs),
-          onProgress: (line) => {
-            const doneMs = parseFfmpegTimeMs(line);
-            if (doneMs === null) return;
-            const now = Date.now();
-            if (now - lastClipBeat < 10_000) return;
-            lastClipBeat = now;
-            void ctx
-              .heartbeat({
-                stage: "rendering",
-                activity: `Rendering clip ${i + 1}/${segments.length}`,
-                percent: Math.round(
-                  clipBase + Math.min(1, doneMs / clipDurationMs) * clipSpan,
-                ),
-              })
-              .catch(() => {});
-          },
+        originalPath = await downloadSource(
+          source.object_key,
+          `source${extname(source.object_key) || ".mp4"}`,
+          1,
+        );
+      } catch (downloadError) {
+        renderSource = "proxy";
+        logger.warn("original download failed; rendering from proxy", {
+          job_id: job.id,
+          reason:
+            downloadError instanceof Error ? downloadError.message : "unknown",
         });
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("timed out")) {
-          throw new JobError(
-            "RENDER_CLIP_TIMEOUT",
-            `Cutting clip ${i + 1} of ${segments.length} took too long and was stopped.`,
-            { retryable: true, details: { clip_duration_ms: clipDurationMs } },
-          );
-        }
-        throw error;
       }
-      segmentPaths.push(segPath);
     }
+
+    let segmentPaths: string[] = [];
+    if (renderSource === "original" && originalPath) {
+      try {
+        segmentPaths = await cutAllSegments(originalPath, env.renderHeight);
+      } catch (error) {
+        const code = error instanceof JobError ? error.code : null;
+        if (code !== "RENDER_CLIP_STALLED" && code !== "RENDER_CLIP_TIMEOUT") {
+          throw error;
+        }
+        renderSource = "proxy";
+        logger.warn("cutting the original stalled; rendering from proxy", {
+          job_id: job.id,
+          reason: error instanceof Error ? error.message : "unknown",
+        });
+      }
+      // Free the original either way: cutting is done, or the proxy pass
+      // below needs the disk space more than we need this copy.
+      await rm(originalPath, { force: true }).catch(() => {});
+      originalPath = null;
+    }
+
+    if (renderSource === "proxy") {
+      const proxy = await loadProxyAsset(job.project_id);
+      if (!proxy) {
+        throw new JobError(
+          "RENDER_NO_USABLE_SOURCE",
+          "The recording could not be processed and no analysis copy exists.",
+          { retryable: false },
+        );
+      }
+      const proxyPath = await downloadSource(
+        proxy.object_key,
+        `proxy${extname(proxy.object_key) || ".mp4"}`,
+        2,
+      );
+      segmentPaths = await cutAllSegments(
+        proxyPath,
+        Math.min(env.renderHeight, env.proxyHeight),
+      );
+      await rm(proxyPath, { force: true }).catch(() => {});
+    }
+
     if (segmentPaths.length === 0) {
       throw new JobError("RENDER_NO_CLIPS", "No renderable clips.", {
         retryable: false,
       });
-    }
-
-    // The source copy is no longer needed — free the disk before the
-    // concat + final encode double the segment footprint.
-    if (sourceInput.startsWith(workDir)) {
-      await rm(sourceInput, { force: true }).catch(() => {});
     }
 
     // 2) Concatenate into the gameplay track.
@@ -284,6 +376,7 @@ export const render: JobHandler = async (job, ctx) => {
     try {
       await mixFinal(gameplayPath, narrationPath, finalPath, {
         timeoutMs: scaledTimeoutMs(timelineMs, 4),
+        stallTimeoutMs: 4 * 60_000,
         onProgress: (line) => {
           const doneMs = parseFfmpegTimeMs(line);
           if (doneMs === null || timelineMs <= 0) return;
@@ -300,11 +393,18 @@ export const render: JobHandler = async (job, ctx) => {
         },
       });
     } catch (error) {
-      if (error instanceof Error && error.message.includes("timed out")) {
+      if (
+        error instanceof Error &&
+        (error.message.includes("timed out") ||
+          error.message.includes("stalled"))
+      ) {
         throw new JobError(
           "RENDER_ENCODE_TIMEOUT",
-          "Encoding the final video took too long and was stopped.",
-          { retryable: true, details: { timeline_ms: timelineMs } },
+          "Encoding the final video stopped making progress and was stopped.",
+          {
+            retryable: true,
+            details: { timeline_ms: timelineMs, reason: error.message },
+          },
         );
       }
       throw error;
@@ -362,6 +462,7 @@ export const render: JobHandler = async (job, ctx) => {
         output_version_id: outputVersionId,
         segment_count: segmentPaths.length,
         narration_clip_count: narrationClips.length,
+        render_source: renderSource,
       },
     });
 
@@ -378,6 +479,7 @@ export const render: JobHandler = async (job, ctx) => {
         audio_codec: finalProbe.audioCodec,
         segment_count: segmentPaths.length,
         narration_clip_count: narrationClips.length,
+        render_source: renderSource,
       },
     });
     await updateOutputVersion(outputVersionId, {

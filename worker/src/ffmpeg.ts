@@ -4,11 +4,21 @@ import { spawn } from "node:child_process";
  * Runs a process with an explicit argument array (never a shell string), so
  * untrusted values such as URLs and object keys cannot be interpreted as
  * shell syntax (see docs/SECURITY.md). Returns stdout on success.
+ *
+ * `timeoutMs` caps total wall-clock. `stallTimeoutMs` is a liveness watchdog:
+ * the process is killed if it produces NO output (stdout or stderr) for that
+ * long. FFmpeg prints progress roughly every second while it works, so
+ * minutes of total silence mean stuck I/O — the watchdog turns a silent
+ * 20-minute hang into a fast, clearly-labelled failure.
  */
 export function run(
   command: string,
   args: string[],
-  options: { timeoutMs?: number; onStderr?: (line: string) => void } = {},
+  options: {
+    timeoutMs?: number;
+    stallTimeoutMs?: number;
+    onStderr?: (line: string) => void;
+  } = {},
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -23,10 +33,27 @@ export function run(
         }, options.timeoutMs)
       : null;
 
+    let stallTimer: NodeJS.Timeout | null = null;
+    const armStallTimer = () => {
+      if (!options.stallTimeoutMs) return;
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(
+          new Error(
+            `${command} stalled: no output for ${options.stallTimeoutMs}ms`,
+          ),
+        );
+      }, options.stallTimeoutMs);
+    };
+    armStallTimer();
+
     child.stdout.on("data", (chunk: Buffer) => {
+      armStallTimer();
       stdout += chunk.toString();
     });
     child.stderr.on("data", (chunk: Buffer) => {
+      armStallTimer();
       const text = chunk.toString();
       stderr += text;
       if (options.onStderr) {
@@ -38,11 +65,13 @@ export function run(
 
     child.on("error", (error) => {
       if (timeout) clearTimeout(timeout);
+      if (stallTimer) clearTimeout(stallTimer);
       reject(error);
     });
 
     child.on("close", (code) => {
       if (timeout) clearTimeout(timeout);
+      if (stallTimer) clearTimeout(stallTimer);
       if (code === 0) {
         resolve(stdout);
       } else {

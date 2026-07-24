@@ -170,11 +170,24 @@ export function ProjectPipeline({
     return () => clearInterval(id);
   }, [isProcessing, activeJob?.id]);
 
+  // started_at records the FIRST attempt and survives retries, while
+  // scheduled_at moves on every retry — their max approximates the current
+  // attempt's start. Without this, a job retried overnight shows "11h
+  // elapsed" and reads as hopelessly stuck.
   const startedAtMs = activeJob?.started_at
     ? Date.parse(activeJob.started_at)
-    : null;
+    : NaN;
+  const scheduledAtMs = activeJob?.scheduled_at
+    ? Date.parse(activeJob.scheduled_at)
+    : NaN;
+  const attemptStartMs = Math.max(
+    Number.isFinite(startedAtMs) ? startedAtMs : -Infinity,
+    Number.isFinite(scheduledAtMs) ? scheduledAtMs : -Infinity,
+  );
   const elapsedMs =
-    isProcessing && now > 0 && startedAtMs !== null ? now - startedAtMs : null;
+    isProcessing && now > 0 && Number.isFinite(attemptStartMs)
+      ? Math.max(0, now - attemptStartMs)
+      : null;
   const elapsed = elapsedMs !== null ? formatElapsed(elapsedMs) : null;
 
   const hint = stageHint[project.pipeline_state] ?? null;

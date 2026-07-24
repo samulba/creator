@@ -35,11 +35,16 @@ Metadata reads never download the source: FFprobe reads the presigned URL
 over HTTP range requests. The **render** step is the exception — it downloads
 the original once to local temp disk and cuts all clips from the local copy
 (seeking into a presigned URL per clip proved slow and timeout-prone for long
-recordings; if the download itself fails, it falls back to URL streaming).
-FFmpeg timeouts scale with the clip/timeline duration instead of a fixed cap,
-and all temp files are cleaned up after upload (even on failure). Coarse
-analysis reads the small proxy (not the original), uploads it to the Gemini
-File API, and deletes it from Gemini when the pass finishes.
+recordings). If the original cannot be used on the machine — too big for the
+disk, download failure, or ffmpeg stalling on it — the render falls back to
+the **analysis proxy** (same timeline, much smaller) so the pipeline always
+completes; the fallback is recorded as `render_source: "proxy"` in the render
+attempt and final-asset metadata. FFmpeg runs are guarded twice: a wall-clock
+timeout that scales with the clip/timeline duration, and a liveness watchdog
+that kills a run after minutes of total silence (working ffmpeg prints
+progress every second). All temp files are cleaned up after upload (even on
+failure). Coarse analysis reads the small proxy (not the original), uploads
+it to the Gemini File API, and deletes it from Gemini when the pass finishes.
 
 ## AI pipeline (Phases 5–7)
 

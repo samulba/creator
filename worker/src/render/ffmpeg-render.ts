@@ -64,6 +64,7 @@ export async function extractSegment(
     height: number;
     fps: number;
     timeoutMs?: number;
+    stallTimeoutMs?: number;
     onProgress?: (line: string) => void;
   },
 ): Promise<void> {
@@ -98,6 +99,7 @@ export async function extractSegment(
     ],
     {
       timeoutMs: options.timeoutMs ?? SEGMENT_TIMEOUT_MS,
+      stallTimeoutMs: options.stallTimeoutMs,
       onStderr: options.onProgress,
     },
   );
@@ -187,11 +189,13 @@ export async function mixFinal(
   options: {
     audioBitrate?: string;
     timeoutMs?: number;
+    stallTimeoutMs?: number;
     onProgress?: (line: string) => void;
   } = {},
 ): Promise<void> {
   const audioBitrate = options.audioBitrate ?? "192k";
   const timeoutMs = options.timeoutMs ?? SEGMENT_TIMEOUT_MS;
+  const stallTimeoutMs = options.stallTimeoutMs;
 
   if (!narrationPath) {
     await run(
@@ -214,7 +218,7 @@ export async function mixFinal(
         "+faststart",
         outputPath,
       ],
-      { timeoutMs, onStderr: options.onProgress },
+      { timeoutMs, stallTimeoutMs, onStderr: options.onProgress },
     );
     return;
   }
@@ -258,6 +262,6 @@ export async function mixFinal(
       "-shortest",
       outputPath,
     ],
-    { timeoutMs, onStderr: options.onProgress },
+    { timeoutMs, stallTimeoutMs, onStderr: options.onProgress },
   );
 }
