@@ -50,7 +50,10 @@ const stageJobTypes: Partial<Record<number, JobType[]>> = {
  * Real wall-clock duration of a completed stage, in ms, or null if it can't be
  * derived yet. Never invented — only from persisted job start/finish times.
  */
-function stageDurationMs(jobs: UserJobRow[], stageIndex: number): number | null {
+function stageDurationMs(
+  jobs: UserJobRow[],
+  stageIndex: number,
+): number | null {
   const types = stageJobTypes[stageIndex];
   if (!types) return null;
   let minStart = Infinity;
@@ -65,7 +68,11 @@ function stageDurationMs(jobs: UserJobRow[], stageIndex: number): number | null 
     if (start < minStart) minStart = start;
     if (end > maxEnd) maxEnd = end;
   }
-  if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd) || maxEnd <= minStart) {
+  if (
+    !Number.isFinite(minStart) ||
+    !Number.isFinite(maxEnd) ||
+    maxEnd <= minStart
+  ) {
     return null;
   }
   return maxEnd - minStart;
@@ -199,10 +206,9 @@ export function ProjectPipeline({
   // (derived from real stage position), and clearly labelled as approximate.
   const totalStages = semanticStages.length;
   const overallPercent =
-    stageIndex >= 0
-      ? Math.round((stageIndex / (totalStages - 1)) * 100)
-      : null;
-  const stepNumber = stageIndex >= 0 ? Math.min(stageIndex + 1, totalStages) : null;
+    stageIndex >= 0 ? Math.round((stageIndex / (totalStages - 1)) * 100) : null;
+  const stepNumber =
+    stageIndex >= 0 ? Math.min(stageIndex + 1, totalStages) : null;
 
   const retry = async (jobId: string) => {
     setPending(true);
@@ -233,8 +239,8 @@ export function ProjectPipeline({
             "A processing step did not complete. Completed work is preserved, so a retry picks up where it stopped."}
         </p>
         <p className="mt-2 max-w-xl text-xs leading-5 text-ink-muted">
-          Creator retried this step automatically several times before giving
-          up — seeing this screen means it kept failing the same way.
+          Creator retried this step automatically several times before giving up
+          — seeing this screen means it kept failing the same way.
           {project.failure_code ? (
             <>
               {" "}

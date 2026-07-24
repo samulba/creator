@@ -64,6 +64,8 @@ export function SettingsView({
         return;
       }
       router.refresh();
+    } catch {
+      setError("The action failed. Check your connection and retry.");
     } finally {
       setPending(false);
     }
@@ -132,7 +134,7 @@ export function SettingsView({
         </SectionHeader>
 
         {editing?.kind === "channel" && editing.id === "new" ? (
-          <div className="mt-5">
+          <div className="animate-fade-up mt-5">
             <ChannelForm
               channel={null}
               characters={characters}
@@ -153,7 +155,7 @@ export function SettingsView({
           {activeChannels.map((channel) => (
             <li key={channel.id} className="border-b border-edge">
               {editing?.kind === "channel" && editing.id === channel.id ? (
-                <div className="py-5">
+                <div className="animate-fade-up py-5">
                   <ChannelForm
                     channel={channel}
                     characters={characters}
@@ -254,7 +256,7 @@ export function SettingsView({
         </p>
 
         {editing?.kind === "character" && editing.id === "new" ? (
-          <div className="mt-5">
+          <div className="animate-fade-up mt-5">
             <CharacterForm character={null} onDone={closeForm} />
           </div>
         ) : null}
@@ -270,7 +272,7 @@ export function SettingsView({
           {activeCharacters.map((character) => (
             <li key={character.id} className="border-b border-edge">
               {editing?.kind === "character" && editing.id === character.id ? (
-                <div className="py-5">
+                <div className="animate-fade-up py-5">
                   <CharacterForm character={character} onDone={closeForm} />
                 </div>
               ) : (

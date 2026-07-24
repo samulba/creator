@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonClassName } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { createProject } from "@/src/lib/actions/projects";
@@ -96,7 +97,7 @@ export function NewVideoDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8"
+      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-[2px]"
       onClick={() => {
         if (!pending) onClose();
       }}
@@ -105,7 +106,7 @@ export function NewVideoDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-video-title"
-        className="max-h-full w-full max-w-xl overflow-y-auto rounded-md border border-edge-strong bg-overlay"
+        className="animate-dialog-in shadow-lift max-h-full w-full max-w-xl overflow-y-auto rounded-xl border border-edge-strong bg-overlay"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-4 border-b border-edge px-6 py-5">
@@ -138,7 +139,7 @@ export function NewVideoDialog({
             </p>
             <Link
               href="/app/settings"
-              className="mt-5 inline-flex items-center gap-2 rounded-sm border border-accent bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-colors hover:border-accent-hover hover:bg-accent-hover"
+              className={buttonClassName("primary", "md", "mt-5")}
             >
               Open settings
             </Link>
@@ -214,69 +215,75 @@ export function NewVideoDialog({
                 </dl>
               ) : null}
 
-              {showOverrides ? (
-                <div className="space-y-4 border-l-2 border-edge pl-4">
-                  <Field
-                    label="Creative direction override"
-                    htmlFor="new-video-direction"
-                  >
-                    <Select
-                      id="new-video-direction"
-                      value={direction}
-                      onChange={(event) => setDirection(event.target.value)}
+              <Checkbox
+                label="Override channel defaults for this video"
+                description="Direction, length, or narrator — just for this one production."
+                checked={showOverrides}
+                onChange={(event) => setShowOverrides(event.target.checked)}
+              />
+
+              <div
+                className="reveal-rows !mt-0"
+                data-open={showOverrides}
+                aria-hidden={!showOverrides}
+                inert={!showOverrides}
+              >
+                <div>
+                  <div className="mt-4 space-y-4 border-l-2 border-accent/30 py-1 pl-4">
+                    <Field
+                      label="Creative direction override"
+                      htmlFor="new-video-direction"
                     >
-                      <option value="">Use channel default</option>
-                      {creativeDirectionOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field
-                    label="Target length override"
-                    htmlFor="new-video-length"
-                  >
-                    <Select
-                      id="new-video-length"
-                      value={length}
-                      onChange={(event) => setLength(event.target.value)}
+                      <Select
+                        id="new-video-direction"
+                        value={direction}
+                        onChange={(event) => setDirection(event.target.value)}
+                      >
+                        <option value="">Use channel default</option>
+                        {creativeDirectionOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field
+                      label="Target length override"
+                      htmlFor="new-video-length"
                     >
-                      <option value="">Use channel default</option>
-                      {targetLengthOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field
-                    label="Narrator character override"
-                    htmlFor="new-video-character"
-                  >
-                    <Select
-                      id="new-video-character"
-                      value={characterId}
-                      onChange={(event) => setCharacterId(event.target.value)}
+                      <Select
+                        id="new-video-length"
+                        value={length}
+                        onChange={(event) => setLength(event.target.value)}
+                      >
+                        <option value="">Use channel default</option>
+                        {targetLengthOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field
+                      label="Narrator character override"
+                      htmlFor="new-video-character"
                     >
-                      <option value="">Use channel default</option>
-                      {characters.map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
+                      <Select
+                        id="new-video-character"
+                        value={characterId}
+                        onChange={(event) => setCharacterId(event.target.value)}
+                      >
+                        <option value="">Use channel default</option>
+                        {characters.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  className="text-xs text-ink-muted underline decoration-edge-strong underline-offset-4 transition-colors hover:text-ink"
-                  onClick={() => setShowOverrides(true)}
-                >
-                  Override channel defaults for this video
-                </button>
-              )}
+              </div>
 
               {error ? <FormMessage tone="error">{error}</FormMessage> : null}
             </div>

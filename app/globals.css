@@ -65,6 +65,8 @@
 
   /* Motion */
   --animate-fade-up: fade-up 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-dialog-in: dialog-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
@@ -154,6 +156,44 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Dialog entrance: settle up + scale, matched to the panel shadow. */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/*
+ * Animated disclosure: a grid row that transitions 0fr → 1fr, so content
+ * expands/collapses smoothly at its natural height (no max-height hacks).
+ */
+.reveal-rows {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal-rows[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.reveal-rows > * {
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* Pulsing ring for the active pipeline node. */
