@@ -48,6 +48,24 @@ export async function startJob(jobId: string, workerId: string): Promise<void> {
   if (error) throw new Error(`start_job failed: ${error.message}`);
 }
 
+/**
+ * Hands a running/leased job back to the queue without burning an attempt —
+ * used on graceful shutdown (deploys, scale-down): the interruption is an
+ * infrastructure event, not a failure of the job. Requires migration 014;
+ * on older schemas the RPC is missing and this throws (callers catch).
+ */
+export async function releaseJob(
+  jobId: string,
+  workerId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("release_job", {
+    p_job_id: jobId,
+    p_worker_id: workerId,
+  });
+  if (error) throw new Error(`release_job failed: ${error.message}`);
+  return Boolean(data);
+}
+
 export async function heartbeatJob(
   jobId: string,
   workerId: string,

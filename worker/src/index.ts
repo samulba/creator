@@ -9,6 +9,7 @@ import {
   failJob,
   heartbeatJob,
   isProjectActive,
+  releaseJob,
   startJob,
 } from "./supabase.js";
 import { JobError, type ProcessingJob } from "./types.js";
@@ -16,6 +17,9 @@ import { JobError, type ProcessingJob } from "./types.js";
 const workerId = `${env.workerName}-${randomUUID().slice(0, 8)}`;
 
 let shuttingDown = false;
+
+/** The job currently being processed, so shutdown can hand it back. */
+let activeJobId: string | null = null;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,6 +37,8 @@ async function runJob(job: ProcessingJob): Promise<void> {
     });
     return;
   }
+
+  activeJobId = job.id;
 
   // The job must be running before any terminal transition: complete_job
   // and fail_job both require status = 'running', so starting first also
@@ -124,6 +130,7 @@ async function runJob(job: ProcessingJob): Promise<void> {
     }
   } finally {
     clearInterval(leaseRenewal);
+    activeJobId = null;
   }
 }
 
@@ -195,6 +202,36 @@ async function loop(): Promise<void> {
 function onShutdown(signal: string) {
   logger.info("shutdown requested", { signal });
   shuttingDown = true;
+
+  // Hand the in-flight job straight back to the queue (release_job refunds
+  // the attempt — a deploy/restart is not the job's fault). Without this the
+  // job sat leased until the lease expired (up to 5 minutes of dead time)
+  // and the re-claim burned an attempt from its budget. The container dies
+  // right after us, taking any running ffmpeg with it; handlers are
+  // idempotent, so the next worker redoes the step cleanly.
+  const jobId = activeJobId;
+  void (async () => {
+    if (jobId) {
+      try {
+        const released = await releaseJob(jobId, workerId);
+        logger.info("job handed back for restart", {
+          job_id: jobId,
+          released,
+        });
+      } catch (error) {
+        // Missing migration 014 or a network blip: the lease reaper picks
+        // the job up after expiry instead — slower, but nothing is lost.
+        logger.warn("job release failed; lease reaper will recover it", {
+          job_id: jobId,
+          reason: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    }
+    process.exit(0);
+  })();
+
+  // Never let a hanging RPC block the shutdown window.
+  setTimeout(() => process.exit(0), 5000).unref();
 }
 
 process.on("SIGTERM", () => onShutdown("SIGTERM"));

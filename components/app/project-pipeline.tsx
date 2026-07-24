@@ -232,6 +232,19 @@ export function ProjectPipeline({
           {project.failure_message ??
             "A processing step did not complete. Completed work is preserved, so a retry picks up where it stopped."}
         </p>
+        <p className="mt-2 max-w-xl text-xs leading-5 text-ink-muted">
+          Creator retried this step automatically several times before giving
+          up — seeing this screen means it kept failing the same way.
+          {project.failure_code ? (
+            <>
+              {" "}
+              Error code:{" "}
+              <span className="selectable font-mono">
+                {project.failure_code}
+              </span>
+            </>
+          ) : null}
+        </p>
 
         <div className="panel mt-8 p-5 sm:p-6">
           <p className="text-[11px] font-medium tracking-wider text-ink-muted uppercase">
