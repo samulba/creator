@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, statfs } from "node:fs/promises";
+import { mkdtemp, rm, statfs, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 
@@ -7,6 +7,7 @@ import { env } from "../env.js";
 import { probe } from "../ffmpeg.js";
 import { logger } from "../logger.js";
 import { downloadToFile, presignGet, uploadFile } from "../r2.js";
+import { buildAssDocument, buildCaptionCues } from "../render/captions.js";
 import {
   buildNarrationTrack,
   concatSegments,
@@ -21,7 +22,9 @@ import {
   createRenderAttempt,
   enqueuePipelineJob,
   insertAsset,
+  loadActiveCreativeSettings,
   loadEditSegments,
+  loadScriptSections,
   loadEditVersion,
   loadLatestEditVersion,
   loadNarrationObjectKeys,
@@ -73,6 +76,19 @@ export const render: JobHandler = async (job, ctx) => {
   }
 
   const segments = await loadEditSegments(edit.id);
+
+  // Presentation tokens from the channel's edit style (same defaults as the
+  // EDL builder): transitions at time-skips and burned-in caption styling.
+  const settings = await loadActiveCreativeSettings(job.project_id);
+  const editStyle = (settings?.edit_style ?? {}) as Record<string, unknown>;
+  const styleToken = (key: string, fallback: string): string => {
+    const value = editStyle[key];
+    return typeof value === "string" && value.trim() ? value.trim() : fallback;
+  };
+  const transitionStyle = styleToken("transition_style", "subtle");
+  const captionStyle = styleToken("caption_style", "standard");
+  const transitionFadeMs =
+    transitionStyle === "cut_only" ? 0 : transitionStyle === "dynamic" ? 400 : 250;
   if (segments.length === 0) {
     throw new JobError("RENDER_NO_SEGMENTS", "The edit plan has no segments.", {
       retryable: false,
@@ -183,10 +199,29 @@ export const render: JobHandler = async (job, ctx) => {
         });
         const segPath = join(workDir, `seg_${i}.mp4`);
         let lastClipBeat = 0;
+        // Dip-to-black transitions ONLY at time-skips (source discontinuity)
+        // and the video's very start/end — cuts inside continuous footage
+        // stay seamless. Length depends on the transition_style token.
+        const previous = segments[i - 1];
+        const next = segments[i + 1];
+        const fadeIn =
+          transitionFadeMs > 0 &&
+          (previous === undefined || previous.source_end_ms !== start)
+            ? transitionFadeMs
+            : 0;
+        const fadeOut =
+          transitionFadeMs > 0 &&
+          (next === undefined ||
+            next.source_start_ms === null ||
+            next.source_start_ms !== end)
+            ? transitionFadeMs
+            : 0;
         try {
           await extractSegment(inputPath, start, end, segPath, {
             height,
             fps: env.renderFps,
+            fadeInMs: fadeIn,
+            fadeOutMs: fadeOut,
             timeoutMs: scaledTimeoutMs(clipDurationMs),
             stallTimeoutMs: STALL_MS,
             onProgress: (line) => {
@@ -374,6 +409,7 @@ export const render: JobHandler = async (job, ctx) => {
       url: string;
       delayMs: number;
       maxDurationMs?: number;
+      sectionId?: string;
     }> = [];
     for (const seg of segments) {
       if (!seg.script_section_id) continue;
@@ -382,16 +418,56 @@ export const render: JobHandler = async (job, ctx) => {
       narrationClips.push({
         url: await presignGet(objectKey),
         delayMs: seg.output_start_ms,
+        sectionId: seg.script_section_id,
       });
     }
 
     // Cap every narration clip at the gap to the next one (minus a small
     // breath) so two lines can never speak over each other.
     narrationClips.sort((a, b) => a.delayMs - b.delayMs);
+    const slotBySection = new Map<
+      string,
+      { delayMs: number; maxDurationMs: number }
+    >();
     for (let i = 0; i < narrationClips.length; i += 1) {
       const clip = narrationClips[i]!;
       const nextStart = narrationClips[i + 1]?.delayMs ?? timelineMs;
       clip.maxDurationMs = Math.max(1_000, nextStart - clip.delayMs - 350);
+      if (clip.sectionId) {
+        slotBySection.set(clip.sectionId, {
+          delayMs: clip.delayMs,
+          maxDurationMs: clip.maxDurationMs,
+        });
+      }
+    }
+
+    // Burned-in animated captions for the narration (channel caption_style).
+    let subtitlesPath: string | null = null;
+    if (captionStyle !== "none" && sectionIds.length > 0) {
+      const sectionTexts = edit.script_version_id
+        ? await loadScriptSections(edit.script_version_id)
+        : [];
+      const textById = new Map(sectionTexts.map((s) => [s.id, s.text]));
+      const captionSections = segments
+        .filter((s) => s.script_section_id && textById.has(s.script_section_id))
+        .map((seg) => {
+          const sectionId = seg.script_section_id!;
+          const slot = slotBySection.get(sectionId);
+          return {
+            text: textById.get(sectionId)!,
+            startMs: slot?.delayMs ?? seg.output_start_ms,
+            maxDurationMs: slot?.maxDurationMs ?? 12_000,
+          };
+        });
+      const cues = buildCaptionCues(captionSections);
+      if (cues.length > 0) {
+        subtitlesPath = join(workDir, "captions.ass");
+        await writeFile(
+          subtitlesPath,
+          buildAssDocument(cues, captionStyle),
+          "utf8",
+        );
+      }
     }
 
     let narrationPath: string | null = null;
@@ -415,6 +491,7 @@ export const render: JobHandler = async (job, ctx) => {
     let lastEncodeBeat = 0;
     try {
       await mixFinal(gameplayPath, narrationPath, finalPath, {
+        subtitlesPath,
         timeoutMs: scaledTimeoutMs(timelineMs, 4),
         stallTimeoutMs: 4 * 60_000,
         onProgress: (line) => {

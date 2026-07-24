@@ -177,6 +177,6 @@ test("buildEdl records enumerated edit_style tokens with defaults", () => {
   const style = result.edl.edit_style as Record<string, string>;
   assert.equal(style.caption_style, "minimal");
   assert.equal(style.zoom_usage, "none"); // default when absent
-  assert.equal(style.transition_style, "cut");
+  assert.equal(style.transition_style, "subtle");
   assert.equal(result.edl.schema_version, 2);
 });

@@ -5,10 +5,10 @@
  * pipeline inspectable and lets the raw FFmpeg operations be smoke-tested on
  * generated media without any live R2/provider data.
  *
- * v1 scope: cut selected moments from the source, concatenate them, overlay
- * narration positioned on the output timeline, duck the gameplay audio under
- * narration, and encode the final MP4. Basic zooms and burned-in captions are
- * intentionally deferred (documented in worker/README.md).
+ * Scope: cut the coverage segments from the source (dip-to-black fades at
+ * time-skips), concatenate them, overlay narration positioned on the output
+ * timeline, duck the gameplay audio under narration, burn in animated ASS
+ * captions (captions.ts), and encode the final MP4. Zooms are still deferred.
  */
 
 import { writeFile } from "node:fs/promises";
@@ -63,12 +63,31 @@ export async function extractSegment(
   options: {
     height: number;
     fps: number;
+    /** Dip-to-black fade at the clip head (used at time-skips). */
+    fadeInMs?: number;
+    /** Dip-to-black fade at the clip tail (used at time-skips). */
+    fadeOutMs?: number;
     timeoutMs?: number;
     stallTimeoutMs?: number;
     onProgress?: (line: string) => void;
   },
 ): Promise<void> {
   const durationMs = Math.max(1, endMs - startMs);
+
+  let videoFilter = `scale=-2:${options.height},fps=${options.fps},format=yuv420p`;
+  const audioFilters: string[] = [];
+  if (options.fadeInMs && options.fadeInMs > 0) {
+    videoFilter += `,fade=t=in:st=0:d=${msToSeconds(options.fadeInMs)}`;
+    audioFilters.push(`afade=t=in:st=0:d=${msToSeconds(options.fadeInMs)}`);
+  }
+  if (options.fadeOutMs && options.fadeOutMs > 0) {
+    const fadeStart = Math.max(0, durationMs - options.fadeOutMs);
+    videoFilter += `,fade=t=out:st=${msToSeconds(fadeStart)}:d=${msToSeconds(options.fadeOutMs)}`;
+    audioFilters.push(
+      `afade=t=out:st=${msToSeconds(fadeStart)}:d=${msToSeconds(options.fadeOutMs)}`,
+    );
+  }
+
   await run(
     "ffmpeg",
     [
@@ -80,7 +99,8 @@ export async function extractSegment(
       "-t",
       msToSeconds(durationMs),
       "-vf",
-      `scale=-2:${options.height},fps=${options.fps},format=yuv420p`,
+      videoFilter,
+      ...(audioFilters.length ? ["-af", audioFilters.join(",")] : []),
       "-c:v",
       "libx264",
       "-preset",
@@ -195,6 +215,8 @@ export async function mixFinal(
   outputPath: string,
   options: {
     audioBitrate?: string;
+    /** ASS subtitle file to burn in (see captions.ts). */
+    subtitlesPath?: string | null;
     timeoutMs?: number;
     stallTimeoutMs?: number;
     onProgress?: (line: string) => void;
@@ -203,6 +225,7 @@ export async function mixFinal(
   const audioBitrate = options.audioBitrate ?? "192k";
   const timeoutMs = options.timeoutMs ?? SEGMENT_TIMEOUT_MS;
   const stallTimeoutMs = options.stallTimeoutMs;
+  const subtitles = options.subtitlesPath ?? null;
 
   if (!narrationPath) {
     await run(
@@ -211,6 +234,7 @@ export async function mixFinal(
         "-y",
         "-i",
         gameplayPath,
+        ...(subtitles ? ["-vf", `ass=filename=${subtitles}`] : []),
         "-c:v",
         "libx264",
         "-preset",
@@ -238,7 +262,8 @@ export async function mixFinal(
     "[0:a]aresample=48000[ga];" +
     "[1:a]aresample=48000,asplit=2[na1][na2];" +
     "[ga][na1]sidechaincompress=threshold=0.03:ratio=8:attack=5:release=300[duck];" +
-    "[duck][na2]amix=inputs=2:normalize=0:duration=first[aout]";
+    "[duck][na2]amix=inputs=2:normalize=0:duration=first[aout]" +
+    (subtitles ? `;[0:v]ass=filename=${subtitles}[vout]` : "");
 
   await run(
     "ffmpeg",
@@ -251,7 +276,7 @@ export async function mixFinal(
       "-filter_complex",
       filter,
       "-map",
-      "0:v",
+      subtitles ? "[vout]" : "0:v",
       "-map",
       "[aout]",
       "-c:v",

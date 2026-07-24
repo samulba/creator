@@ -158,9 +158,9 @@ export function buildCoverageCut(
 
 /** Build the EDL. Beats with a non-positive source range are skipped. */
 export function buildEdl(input: EdlInput): EdlResult {
-  const captionStyle = token(input.editStyle, "caption_style", "none");
+  const captionStyle = token(input.editStyle, "caption_style", "standard");
   const zoomUsage = token(input.editStyle, "zoom_usage", "none");
-  const transitionStyle = token(input.editStyle, "transition_style", "cut");
+  const transitionStyle = token(input.editStyle, "transition_style", "subtle");
   const effectSummary = `caption:${captionStyle} zoom:${zoomUsage} transition:${transitionStyle}`;
   const styleMetadata = {
     caption_style: captionStyle,
