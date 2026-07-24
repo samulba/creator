@@ -207,16 +207,27 @@ export const render: JobHandler = async (job, ctx) => {
             },
           });
         } catch (error) {
-          if (
-            error instanceof Error &&
-            (error.message.includes("timed out") ||
-              error.message.includes("stalled"))
-          ) {
+          const message = error instanceof Error ? error.message : "";
+          if (message.includes("timed out") || message.includes("stalled")) {
             throw new JobError(
-              error.message.includes("stalled")
+              message.includes("stalled")
                 ? "RENDER_CLIP_STALLED"
                 : "RENDER_CLIP_TIMEOUT",
               `Cutting clip ${i + 1} of ${segments.length} stopped making progress.`,
+              {
+                retryable: true,
+                details: { clip_duration_ms: clipDurationMs },
+              },
+            );
+          }
+          // "exited null" = killed by a signal, "exited 137" = SIGKILL —
+          // on a small worker that is almost always the kernel OOM killer
+          // ending the 1080p encode. Retrying the original would die the
+          // same way, so this must trigger the proxy fallback too.
+          if (message.includes("exited null") || message.includes("exited 137")) {
+            throw new JobError(
+              "RENDER_CLIP_KILLED",
+              `Cutting clip ${i + 1} of ${segments.length} was killed — the worker likely ran out of memory.`,
               {
                 retryable: true,
                 details: { clip_duration_ms: clipDurationMs },
@@ -246,7 +257,18 @@ export const render: JobHandler = async (job, ctx) => {
     let renderSource: "original" | "proxy" = "original";
     let originalPath: string | null = null;
 
-    if (source.byte_size !== null) {
+    // If two attempts with the original already died (e.g. the whole worker
+    // container was OOM-killed, so the in-process fallback never ran), stop
+    // banging against the same wall: render from the proxy directly.
+    if (job.attempt_count >= 2) {
+      renderSource = "proxy";
+      logger.warn("earlier attempts failed; rendering from proxy", {
+        job_id: job.id,
+        attempt_count: job.attempt_count,
+      });
+    }
+
+    if (renderSource === "original" && source.byte_size !== null) {
       // Source + normalized segments + concat + final ≈ 2× source, + slack.
       const stats = await statfs(workDir);
       const freeBytes = stats.bavail * stats.bsize;
@@ -283,12 +305,17 @@ export const render: JobHandler = async (job, ctx) => {
         segmentPaths = await cutAllSegments(originalPath, env.renderHeight);
       } catch (error) {
         const code = error instanceof JobError ? error.code : null;
-        if (code !== "RENDER_CLIP_STALLED" && code !== "RENDER_CLIP_TIMEOUT") {
+        if (
+          code !== "RENDER_CLIP_STALLED" &&
+          code !== "RENDER_CLIP_TIMEOUT" &&
+          code !== "RENDER_CLIP_KILLED"
+        ) {
           throw error;
         }
         renderSource = "proxy";
-        logger.warn("cutting the original stalled; rendering from proxy", {
+        logger.warn("cutting the original failed; rendering from proxy", {
           job_id: job.id,
+          code,
           reason: error instanceof Error ? error.message : "unknown",
         });
       }
